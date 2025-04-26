@@ -1,5 +1,6 @@
 #include "mcp/IMCPBroker.h"
 #include "mcp/IMCPProvider_V1.h"
+#include "mcp/IMCPSubscriber_V1.h"
 #include <gtest/gtest.h>
 #include <memory>
 #include <vector>
@@ -22,6 +23,24 @@ private:
     std::vector<std::string> m_topics;
 };
 
+// Test subscriber implementation
+class TestSubscriber : public mcp::IMCPSubscriber_V1 {
+public:
+    TestSubscriber() : m_messageCount(0) {}
+
+    void onMCPMessage(const mcp::MCPMessage_V1* message) override {
+        // Just count messages for now (messages not implemented yet)
+        m_messageCount++;
+    }
+
+    int getMessageCount() const {
+        return m_messageCount;
+    }
+
+private:
+    int m_messageCount;
+};
+
 } // anonymous namespace
 
 // Test fixture for broker tests
@@ -39,11 +58,17 @@ protected:
         provider2 = std::make_shared<TestProvider>(
             std::vector<std::string>{"test/topic2", "test/topic3"}
         );
+
+        // Create some test subscribers
+        subscriber1 = std::make_shared<TestSubscriber>();
+        subscriber2 = std::make_shared<TestSubscriber>();
     }
 
     std::shared_ptr<mcp::IMCPBroker> broker;
     std::shared_ptr<TestProvider> provider1;
     std::shared_ptr<TestProvider> provider2;
+    std::shared_ptr<TestSubscriber> subscriber1;
+    std::shared_ptr<TestSubscriber> subscriber2;
 };
 
 // Test API version is correct
@@ -124,6 +149,71 @@ TEST_F(BrokerTest, UnregisterContext) {
     EXPECT_FALSE(broker->unregisterContext("test/topic1", provider1)); // Not registered
 }
 
+// Test subscription functionality
+TEST_F(BrokerTest, Subscribe) {
+    // Setup - register providers
+    broker->registerContext("test/topic1", provider1);
+    broker->registerContext("test/topic2", provider1);
+    broker->registerContext("test/topic2", provider2);
+    
+    // Subscribe to topics
+    EXPECT_TRUE(broker->subscribe("test/topic1", subscriber1));
+    EXPECT_TRUE(broker->subscribe("test/topic2", subscriber1));
+    EXPECT_TRUE(broker->subscribe("test/topic2", subscriber2));
+    
+    // Test subscription edge cases
+    EXPECT_FALSE(broker->subscribe("", subscriber1)); // Empty topic
+    EXPECT_FALSE(broker->subscribe("test/topic1", nullptr)); // Null subscriber
+    EXPECT_FALSE(broker->subscribe("test/topic1", subscriber1)); // Already subscribed
+}
+
+// Test unsubscribe functionality
+TEST_F(BrokerTest, Unsubscribe) {
+    // Setup - register providers and subscribe
+    broker->registerContext("test/topic1", provider1);
+    broker->registerContext("test/topic2", provider1);
+    
+    broker->subscribe("test/topic1", subscriber1);
+    broker->subscribe("test/topic2", subscriber1);
+    broker->subscribe("test/topic2", subscriber2);
+    
+    // Unsubscribe from one topic
+    EXPECT_TRUE(broker->unsubscribe("test/topic1", subscriber1));
+    
+    // Unsubscribe from shared topic
+    EXPECT_TRUE(broker->unsubscribe("test/topic2", subscriber1));
+    
+    // Test unsubscribe edge cases
+    EXPECT_FALSE(broker->unsubscribe("", subscriber1)); // Empty topic
+    EXPECT_FALSE(broker->unsubscribe("test/topic1", nullptr)); // Null subscriber
+    EXPECT_FALSE(broker->unsubscribe("test/topic1", subscriber1)); // Not subscribed
+}
+
+// Test unsubscribeAll functionality
+TEST_F(BrokerTest, UnsubscribeAll) {
+    // Setup - register providers and subscribe to multiple topics
+    broker->registerContext("test/topic1", provider1);
+    broker->registerContext("test/topic2", provider1);
+    broker->registerContext("test/topic3", provider2);
+    
+    broker->subscribe("test/topic1", subscriber1);
+    broker->subscribe("test/topic2", subscriber1);
+    broker->subscribe("test/topic2", subscriber2);
+    broker->subscribe("test/topic3", subscriber1);
+    
+    // Unsubscribe subscriber1 from all topics
+    EXPECT_TRUE(broker->unsubscribeAll(subscriber1));
+    
+    // subscriber2 should still be subscribed to topic2
+    EXPECT_TRUE(broker->unsubscribe("test/topic2", subscriber2));
+    
+    // Calling unsubscribeAll again should return false (no subscriptions)
+    EXPECT_FALSE(broker->unsubscribeAll(subscriber1));
+    
+    // Test edge case
+    EXPECT_FALSE(broker->unsubscribeAll(nullptr)); // Null subscriber
+}
+
 // Test weak reference behavior
 TEST_F(BrokerTest, WeakReferenceHandling) {
     // Setup - register provider
@@ -140,6 +230,22 @@ TEST_F(BrokerTest, WeakReferenceHandling) {
     
     // Topic should also be removed when no active providers
     EXPECT_TRUE(broker->getAvailableTopics().empty());
+}
+
+// Test weak reference behavior for subscribers
+TEST_F(BrokerTest, SubscriberWeakReferenceHandling) {
+    // Setup - register provider and subscriber
+    broker->registerContext("test/topic1", provider1);
+    broker->subscribe("test/topic1", subscriber1);
+    
+    // Reset subscriber (releasing the shared_ptr)
+    std::weak_ptr<TestSubscriber> weakSubscriber = subscriber1;
+    subscriber1.reset();
+    
+    // The weak reference in the broker should be automatically cleaned up
+    // when attempting to publish (not implemented yet in Sprint 2)
+    // This test will be expanded in Sprint 3
+    EXPECT_TRUE(weakSubscriber.expired());
 }
 
 // Test thread safety for concurrent registration/unregistration
@@ -202,4 +308,45 @@ TEST_F(BrokerTest, ThreadSafety) {
                                   providers[i]) != foundProviders.end());
         }
     }
+}
+
+// Test thread safety for concurrent subscriptions
+TEST_F(BrokerTest, SubscriptionThreadSafety) {
+    const int numThreads = 10;
+    const int numOperationsPerThread = 100;
+    
+    // Setup - register a topic
+    broker->registerContext("concurrent/topic", provider1);
+    
+    std::vector<std::shared_ptr<TestSubscriber>> subscribers;
+    for (int i = 0; i < numThreads; i++) {
+        subscribers.push_back(std::make_shared<TestSubscriber>());
+    }
+    
+    std::vector<std::thread> threads;
+    for (int i = 0; i < numThreads; i++) {
+        threads.push_back(std::thread([this, i, &subscribers, numOperationsPerThread]() {
+            auto& subscriber = subscribers[i];
+            
+            for (int j = 0; j < numOperationsPerThread; j++) {
+                // Subscribe
+                broker->subscribe("concurrent/topic", subscriber);
+                
+                // Unsubscribe (every other iteration)
+                if (j % 2 == 0) {
+                    broker->unsubscribe("concurrent/topic", subscriber);
+                }
+            }
+            
+            // Final unsubscribe
+            broker->unsubscribeAll(subscriber);
+        }));
+    }
+    
+    // Join all threads
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    
+    // If we got here without crashing or deadlocking, the test is considered passed
 } 

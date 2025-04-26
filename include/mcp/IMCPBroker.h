@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IMCPProvider_V1.h"
+#include "IMCPSubscriber_V1.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -8,12 +9,15 @@
 
 namespace mcp {
 
+// Forward declaration
+struct MCPMessage_V1;
+
 /**
  * @brief Interface for the MCP Broker.
  * 
  * This interface defines the core functionality of the Model Context Protocol broker.
  * The broker is responsible for managing the registry of topics and their providers,
- * and for handling discovery functions.
+ * managing subscriptions, and message dispatch.
  */
 class IMCPBroker {
 public:
@@ -44,6 +48,44 @@ public:
      */
     virtual bool unregisterContext(const std::string& topic, 
                                   std::shared_ptr<IMCPProvider_V1> provider) = 0;
+
+    /**
+     * @brief Subscribe to a context topic.
+     * 
+     * This function is called by modules that want to receive updates for a specific topic.
+     * Thread-safe - can be called from any thread.
+     * 
+     * @param topic The name of the topic to subscribe to.
+     * @param subscriber A shared pointer to the subscriber module.
+     * @return bool True if subscription was successful, false otherwise.
+     */
+    virtual bool subscribe(const std::string& topic,
+                          std::shared_ptr<IMCPSubscriber_V1> subscriber) = 0;
+
+    /**
+     * @brief Unsubscribe from a context topic.
+     * 
+     * This function is called when a subscriber no longer wants to receive updates
+     * for a specific topic. Thread-safe - can be called from any thread.
+     * 
+     * @param topic The name of the topic to unsubscribe from.
+     * @param subscriber A shared pointer to the subscriber module.
+     * @return bool True if unsubscription was successful, false otherwise.
+     */
+    virtual bool unsubscribe(const std::string& topic,
+                            std::shared_ptr<IMCPSubscriber_V1> subscriber) = 0;
+
+    /**
+     * @brief Unsubscribe from all topics.
+     * 
+     * This function is called when a subscriber is being removed from the system
+     * and wants to clean up all of its subscriptions. Thread-safe - can be called
+     * from any thread.
+     * 
+     * @param subscriber A shared pointer to the subscriber module.
+     * @return bool True if all unsubscriptions were successful, false otherwise.
+     */
+    virtual bool unsubscribeAll(std::shared_ptr<IMCPSubscriber_V1> subscriber) = 0;
 
     /**
      * @brief Get a list of all available topics in the registry.

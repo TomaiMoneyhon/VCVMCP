@@ -28,6 +28,11 @@ add_library(mcp
 # Set include directory for MCP
 target_include_directories(mcp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Documentation directory
+add_custom_target(docs SOURCES
+  docs/api_documentation.md
+)
+
 # Setup testing
 option(BUILD_TESTING "Build the testing tree" ON)
 if(BUILD_TESTING)

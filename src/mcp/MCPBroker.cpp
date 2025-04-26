@@ -78,6 +78,98 @@ bool MCPBroker::unregisterContext(const std::string& topic,
     return false;
 }
 
+bool MCPBroker::subscribe(const std::string& topic, 
+                         std::shared_ptr<IMCPSubscriber_V1> subscriber) {
+    if (!topic.empty() && subscriber) {
+        std::lock_guard<std::mutex> lock(m_subscriptionMutex);
+        
+        // Check if the subscriber is already subscribed to this topic
+        auto& subscribers = m_subscriptions[topic];
+        for (const auto& weakSubscriber : subscribers) {
+            if (auto existingSubscriber = weakSubscriber.lock()) {
+                if (existingSubscriber == subscriber) {
+                    // Subscriber already registered for this topic
+                    return false;
+                }
+            }
+        }
+        
+        // Add the subscriber to the topic
+        subscribers.push_back(subscriber);
+        return true;
+    }
+    return false;
+}
+
+bool MCPBroker::unsubscribe(const std::string& topic, 
+                           std::shared_ptr<IMCPSubscriber_V1> subscriber) {
+    if (!topic.empty() && subscriber) {
+        std::lock_guard<std::mutex> lock(m_subscriptionMutex);
+        
+        // Find the topic in the subscriptions
+        auto topicIt = m_subscriptions.find(topic);
+        if (topicIt != m_subscriptions.end()) {
+            auto& subscribers = topicIt->second;
+            
+            // Find and remove the subscriber
+            auto it = std::remove_if(subscribers.begin(), subscribers.end(), 
+                [&subscriber](const std::weak_ptr<IMCPSubscriber_V1>& weakSubscriber) {
+                    auto existingSubscriber = weakSubscriber.lock();
+                    return !existingSubscriber || existingSubscriber == subscriber;
+                });
+            
+            if (it != subscribers.end()) {
+                subscribers.erase(it, subscribers.end());
+                
+                // Remove the topic if no subscribers left
+                if (subscribers.empty()) {
+                    m_subscriptions.erase(topicIt);
+                }
+                
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool MCPBroker::unsubscribeAll(std::shared_ptr<IMCPSubscriber_V1> subscriber) {
+    if (!subscriber) {
+        return false;
+    }
+    
+    std::lock_guard<std::mutex> lock(m_subscriptionMutex);
+    bool unsubscribedAny = false;
+    
+    // Iterate through all topics
+    auto topicIt = m_subscriptions.begin();
+    while (topicIt != m_subscriptions.end()) {
+        auto& subscribers = topicIt->second;
+        
+        // Find and remove the subscriber from each topic
+        auto it = std::remove_if(subscribers.begin(), subscribers.end(),
+            [&subscriber](const std::weak_ptr<IMCPSubscriber_V1>& weakSubscriber) {
+                auto existingSubscriber = weakSubscriber.lock();
+                return !existingSubscriber || existingSubscriber == subscriber;
+            });
+        
+        if (it != subscribers.end()) {
+            unsubscribedAny = true;
+            subscribers.erase(it, subscribers.end());
+            
+            // Remove the topic if no subscribers left
+            if (subscribers.empty()) {
+                topicIt = m_subscriptions.erase(topicIt);
+                continue;
+            }
+        }
+        
+        ++topicIt;
+    }
+    
+    return unsubscribedAny;
+}
+
 std::vector<std::string> MCPBroker::getAvailableTopics() const {
     std::lock_guard<std::mutex> lock(m_registryMutex);
     std::vector<std::string> topics;

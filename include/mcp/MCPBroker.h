@@ -51,6 +51,14 @@ public:
     bool unregisterContext(const std::string& topic, 
                           std::shared_ptr<IMCPProvider_V1> provider) override;
     
+    bool subscribe(const std::string& topic,
+                  std::shared_ptr<IMCPSubscriber_V1> subscriber) override;
+    
+    bool unsubscribe(const std::string& topic,
+                    std::shared_ptr<IMCPSubscriber_V1> subscriber) override;
+    
+    bool unsubscribeAll(std::shared_ptr<IMCPSubscriber_V1> subscriber) override;
+    
     std::vector<std::string> getAvailableTopics() const override;
     
     std::vector<std::shared_ptr<IMCPProvider_V1>> findProviders(
@@ -74,6 +82,12 @@ private:
                                           std::vector<std::weak_ptr<IMCPProvider_V1>>>;
     mutable std::mutex m_registryMutex;
     ProviderMap m_topicRegistry;
+    
+    // Subscription data structure: topic -> list of subscribers
+    using SubscriberMap = std::unordered_map<std::string, 
+                                           std::vector<std::weak_ptr<IMCPSubscriber_V1>>>;
+    mutable std::mutex m_subscriptionMutex;
+    SubscriberMap m_subscriptions;
 };
 
 } // namespace mcp 
