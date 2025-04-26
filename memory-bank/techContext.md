@@ -13,13 +13,15 @@
 ### Core Libraries
 
 - **MessagePack**: Primary serialization format for efficient binary data exchange
-  - C++ implementation: `msgpack-c`
-  - Provides compact, efficient binary serialization with defined schemas
+  - C++ implementation: `msgpack11` (lightweight implementation)
+  - Provides compact, efficient binary serialization
   - Faster and smaller than JSON for binary data
+  - Header-only library for easy integration
 
 - **JSON**: Secondary serialization option for human-readable debugging
   - Implementation: `nlohmann/json` (header-only)
   - Used primarily for development and debugging
+  - Placeholder implementation currently in place for future extension
 
 - **VCV Rack Components**:
   - `rack::dsp::RingBuffer`: For thread-safe communication between worker and audio threads
@@ -41,8 +43,8 @@
    - Make/Ninja/MSBuild (platform dependent)
 
 4. **Dependencies**:
-   - MessagePack C++ (`msgpack-c`, included or as submodule)
-   - JSON library (header-only, included or as submodule)
+   - msgpack11 (included in external directory)
+   - nlohmann/json (included in external directory)
 
 ### Development Workflow
 
@@ -109,7 +111,7 @@
 
 | Dependency | Version | Purpose | License |
 |------------|---------|---------|---------|
-| MessagePack C++ | 3.3.0+ | Efficient binary serialization | Boost Software License |
+| msgpack11 | latest | Efficient binary serialization | MIT |
 | nlohmann/json | 3.10.0+ | JSON parsing/serialization for debugging | MIT |
 | VCV Rack SDK | Latest | Integration with VCV Rack | VCV Rack License |
 | Google Test | 1.10.0+ | Unit testing framework | BSD 3-Clause |
@@ -121,6 +123,20 @@
   - `IMCPProvider_V1`: Provider interface
   - `IMCPSubscriber_V1`: Subscriber interface
   - `MCPMessage_V1`: Message structure
+  - `MCPSerialization`: Helper functions for serialization/deserialization
+
+## Serialization Implementation
+
+- **Message Structure**:
+  - `MCPMessage_V1` contains topic, sender ID, data format, and binary data
+  - `std::shared_ptr<void>` used for type-agnostic data storage
+  - `DataFormat` enum specifies serialization format (MSGPACK, JSON, BINARY)
+
+- **Serialization Helpers**:
+  - Template functions for various data types
+  - Type-specific conversion functions
+  - Error handling via `MCPSerializationError` class
+  - Message creation helpers that automatically serialize data
 
 ## Deployment Considerations
 

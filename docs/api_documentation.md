@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The Model Context Protocol (MCP) provides a standardized system for VCV Rack 2 modules to exchange complex, structured data. This document describes the API implemented in Phase 1, covering Sprint 1 (Broker & Registration) and Sprint 2 (Subscription & Lifecycle).
+The Model Context Protocol (MCP) provides a standardized system for VCV Rack 2 modules to exchange complex, structured data. This document describes the API implemented in Phase 1 (Broker & API Foundation) and Phase 2 (Serialization), covering Sprint 1, 2, and 3.
 
 ## Core Interfaces
 
@@ -64,6 +64,83 @@ namespace mcp {
     public:
         virtual void onMCPMessage(const MCPMessage_V1* message) = 0;
     };
+}
+```
+
+### MCPMessage_V1
+
+The message structure for data exchange in the MCP system. Added in Sprint 3.
+
+```cpp
+namespace mcp {
+    // Data format constants
+    namespace DataFormat {
+        const std::string MSGPACK = "application/msgpack";
+        const std::string JSON = "application/json";
+        const std::string BINARY = "application/octet-stream";
+    }
+    
+    struct MCPMessage_V1 {
+        MCPMessage_V1(
+            const std::string& topic,
+            int senderModuleId,
+            const std::string& dataFormat,
+            std::shared_ptr<void> data,
+            std::size_t dataSize
+        );
+        
+        std::string topic;              // The topic name
+        int senderModuleId;             // ID of the sender module
+        std::string dataFormat;         // Format of the data (e.g., "application/msgpack")
+        std::shared_ptr<void> data;     // Serialized data payload
+        std::size_t dataSize;           // Size of the serialized data in bytes
+    };
+}
+```
+
+## Serialization Helpers
+
+The MCP system provides helper functions for serializing and deserializing data. Added in Sprint 3.
+
+```cpp
+namespace mcp {
+    // Error handling
+    class MCPSerializationError : public std::runtime_error {
+        // Thrown when serialization or deserialization fails
+    };
+    
+    namespace serialization {
+        // MessagePack Serialization/Deserialization
+        template<typename T>
+        std::shared_ptr<void> serializeToMsgPack(const T& value, std::size_t& dataSize);
+        
+        template<typename T>
+        T deserializeFromMsgPack(const void* data, std::size_t dataSize);
+        
+        // JSON Serialization/Deserialization
+        template<typename T>
+        std::shared_ptr<void> serializeToJSON(const T& value, std::size_t& dataSize);
+        
+        template<typename T>
+        T deserializeFromJSON(const void* data, std::size_t dataSize);
+        
+        // Message Creation Helpers
+        template<typename T>
+        std::shared_ptr<MCPMessage_V1> createMsgPackMessage(
+            const std::string& topic,
+            int senderModuleId,
+            const T& value);
+        
+        template<typename T>
+        std::shared_ptr<MCPMessage_V1> createJSONMessage(
+            const std::string& topic,
+            int senderModuleId,
+            const T& value);
+        
+        // Message Data Extraction Helper
+        template<typename T>
+        T extractMessageData(const MCPMessage_V1* message);
+    }
 }
 ```
 
@@ -133,6 +210,16 @@ public:
         // Process incoming message
         // This is called on a worker thread, not the audio thread!
         // Use thread-safe communication to pass data to the audio thread
+        
+        // Extract data from the message
+        try {
+            if (message->topic == "other-module/settings") {
+                auto settings = mcp::serialization::extractMessageData<MySettings>(message);
+                // Process settings...
+            }
+        } catch (const mcp::MCPSerializationError& e) {
+            // Handle serialization error
+        }
     }
     
     // ...other module code...
@@ -161,6 +248,37 @@ void onRemove() override {
 }
 ```
 
+### Creating and Sending Messages (Coming in Sprint 4)
+
+The following code demonstrates how messages will be created and published once the publish functionality is implemented in Sprint 4:
+
+```cpp
+// Prepare data to send
+MyData data = { /* ... */ };
+
+// Create a message with MessagePack serialization
+auto message = mcp::serialization::createMsgPackMessage(
+    "my-module/data",  // Topic
+    this->id,          // Module ID
+    data               // Data to serialize
+);
+
+// In Sprint 4, this message will be published via the broker
+// broker->publish(message);
+```
+
+### Data Types Compatible with Serialization
+
+For MessagePack serialization, a type must either:
+1. Be a basic type (int, float, string, etc.)
+2. Be a container of basic types (vector, map, etc.)
+3. Define the `MSGPACK_DEFINE(...)` macro with its member variables
+
+For JSON serialization, a type must either:
+1. Be a basic type supported by nlohmann::json
+2. Be a container of supported types
+3. Define `to_json` and `from_json` friend functions
+
 ## Thread Safety
 
 The MCP system is designed to be thread-safe. All broker methods can be called from any thread, including the audio thread, though care should be taken to avoid performance impacts.
@@ -174,9 +292,7 @@ Key thread safety considerations:
 
 ## Future Developments
 
-Sprint 2 has implemented the subscription and lifecycle management functionality. In upcoming Sprints:
+- Sprint 3 (current) has implemented the message structure and serialization functionality.
+- Sprint 4 will implement the publish/receive functionality, allowing providers to publish messages and subscribers to receive them.
 
-- Sprint 3 will define the message structure and implement serialization.
-- Sprint 4 will implement the publish/receive functionality.
-
-Until then, the `onMCPMessage` callback won't be called, as message dispatch hasn't been implemented yet. 
+When Sprint 4 is complete, the `onMCPMessage` callback will be called when messages are published to subscribed topics. 

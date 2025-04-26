@@ -1,116 +1,82 @@
-# VCV Rack MCP - Active Context
+# VCV Rack MCP Active Context
 
-## Current Work Focus
+## Current Focus
 
-The project has completed Phase 1, Sprint 2 (Subscription & Basic Lifecycle) and is preparing to begin Phase 2, Sprint 3 (Message Structure & Serialization).
+We are now transitioning from Sprint 3 (Message Structure & Serialization) to Sprint 4 (Message Dispatch) in Phase 2 of the VCV Rack MCP development.
 
-### Sprint 2 Completed (Subscription & Basic Lifecycle)
+### Just Completed: Sprint 3 - Message Structure & Serialization
+- ✅ Defined the MCPMessage_V1 struct for exchanging data between modules
+- ✅ Integrated msgpack11 library for efficient binary serialization
+- ✅ Implemented serialization/deserialization helper functions
+- ✅ Created template functions for common data types
+- ✅ Developed helper functions for message creation and data extraction
+- ✅ Created comprehensive unit tests for all serialization functionality
+- ✅ All tests pass successfully for broker functionality and serialization
 
-We have successfully implemented:
-
-- The `IMCPSubscriber_V1` interface with `onMCPMessage` placeholder
-- Subscription management in the broker:
-  - `subscribe` function for topic subscription
-  - `unsubscribe` function for topic unsubscription
-  - `unsubscribeAll` function for module cleanup
-- Thread-safe subscription handling with mutex protection
-- Weak reference management for subscribers
-- Enhanced unit tests for subscription functionality
-- Initial API documentation
-
-### Sprint 3 Preparation (Message Structure & Serialization)
-
-We are now preparing to implement message structure and serialization functionality, including:
-
-- Defining the `MCPMessage_V1` structure
-- Integrating MessagePack for serialization
-- Creating helper functions for serialization/deserialization
-- Implementing message structure unit tests
-- Preparing for publish/dispatch implementation
+### Up Next: Sprint 4 - Message Dispatch
+- Add the publish method to the broker interface and implementation
+- Create a worker thread for asynchronous message delivery
+- Implement message dispatch to registered subscribers
+- Ensure thread safety for message queue operations
+- Add comprehensive unit tests for the dispatch system
+- Update API documentation with publish/receive examples
 
 ## Recent Changes
 
-The subscription functionality of the MCP has been completed with the following key components:
+1. Defined the MCPMessage_V1 structure with:
+   - Topic string for message routing
+   - Sender module ID for origin tracking
+   - Data format identifier (MSGPACK/JSON/BINARY)
+   - Raw data buffer (std::shared_ptr<void>) and size
 
-1. **New Interface**:
-   - `IMCPSubscriber_V1`: Interface for modules that want to receive updates with `onMCPMessage` callback
+2. Implemented serialization helpers:
+   - MessagePack serialization using msgpack11 library
+   - Template functions for various data types (strings, integers, floats, arrays)
+   - Helper functions to create messages with serialized data
+   - Functions to extract and deserialize data from messages
 
-2. **Enhanced Broker Interface**:
-   - Added `subscribe`, `unsubscribe`, and `unsubscribeAll` functions
-   - Forward-declared `MCPMessage_V1` structure for upcoming Sprint 3
+3. Created a robust testing framework:
+   - Unit tests for MCPMessage_V1 structure
+   - Tests for MessagePack serialization with simple types and arrays
+   - Tests for message creation and data extraction
+   - Tests for error handling and edge cases
 
-3. **Broker Implementation**:
-   - Added subscription management with thread-safe operations
-   - Implemented proper weak reference handling for subscribers
-   - Added appropriate mutex protection for subscription operations
+## Active Decisions
 
-4. **Testing**:
-   - Added unit tests for subscription/unsubscription
-   - Added tests for weak reference handling
-   - Added concurrency tests for subscription operations
+1. **Message Format**: 
+   - Using MessagePack as primary serialization format via msgpack11
+   - Added placeholder for JSON functionality for future extension
+   - MCPMessage_V1 uses std::shared_ptr<void> for flexible data storage
+   - DataFormat enum identifies the serialization format used
 
-5. **Documentation**:
-   - Created API documentation covering both Sprint 1 and Sprint 2 functionality
-   - Updated README.md with Sprint 2 features
+2. **Thread Safety**:
+   - Message serialization occurs outside the audio thread
+   - Worker thread will handle message dispatch (upcoming in Sprint 4)
+   - Lock-free approach planned for audio thread communication
 
-## Active Decisions and Considerations
+3. **Error Handling**:
+   - MCPSerializationError class implemented for serialization error reporting
+   - Comprehensive error checking in serialization/deserialization functions
+   - More extensive error handling planned for Sprint 5
 
-### Current Decisions
+## Next Considerations
 
-1. **Subscriber Interface Design**: Implemented a simple `IMCPSubscriber_V1` interface with a single `onMCPMessage` callback to keep the API clean and flexible.
+1. **Worker Thread Design**:
+   - How to implement efficient message dispatch?
+   - What thread synchronization primitives to use?
+   - How to handle thread termination gracefully?
 
-2. **Subscription Storage**: Implemented a topic-centric organization in the broker:
-   - Using `std::unordered_map<std::string, std::vector<std::weak_ptr<IMCPSubscriber_V1>>>` for efficient topic lookup
-   - This allows for efficient message dispatch to all subscribers of a topic
+2. **Publish API Design**:
+   - Should publish be synchronous or asynchronous?
+   - How to handle delivery failures?
+   - What guarantees should the API provide about delivery?
 
-3. **Thread Safety**: Separated mutex protection for registry and subscriptions:
-   - `m_registryMutex` for provider registration
-   - `m_subscriptionMutex` for subscriber management
-   - This reduces contention between provider and subscriber operations
+3. **Testing Strategy**:
+   - How to test concurrent message publishing?
+   - How to verify correct thread behavior?
+   - How to simulate various error conditions?
 
-4. **Lifecycle Integration**: Implemented lifecycle management through:
-   - `unsubscribeAll` for easy cleanup when a module is removed
-   - Weak reference handling to automatically handle destroyed modules
-
-### Open Questions for Sprint 3
-
-1. **Message Structure Design**: How should the `MCPMessage_V1` structure be designed?
-   - What fields are required for effective message routing?
-   - How should binary data be represented and managed?
-   - How to ensure backward compatibility for future versions?
-
-2. **Serialization Approach**: How to integrate MessagePack most effectively?
-   - Direct integration or wrapper helpers?
-   - Support for common VCV Rack data types?
-   - Error handling for serialization failures?
-
-3. **Memory Management**: How to efficiently manage serialized data?
-   - Who owns the memory for message payloads?
-   - How to avoid excessive copying of data?
-   - When to free message memory?
-
-## Next Steps
-
-### Immediate Tasks (Sprint 3)
-
-1. Define the `MCPMessage_V1` structure
-2. Integrate MessagePack library
-3. Implement serialization/deserialization helpers
-4. Create unit tests for message structure and serialization
-5. Update documentation with message structure details
-
-### Upcoming Milestones
-
-**Sprint 3: Message Structure & Serialization** (Current Focus)
-- Define message structure
-- Integrate serialization library
-- Create helper functions
-- Test serialization/deserialization
-- Document message format
-
-**Sprint 4: Basic Publish & Receive** (Next)
-- Implement publish functionality
-- Create worker thread for message dispatch
-- Implement subscriber notification
-- Add thread-safe communication patterns
-- Test end-to-end message flow 
+4. **Performance Optimization**:
+   - Should we use pre-allocated message pools?
+   - How to minimize copying of large messages?
+   - Should we implement message batching for efficiency? 

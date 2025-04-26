@@ -17,12 +17,28 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Include directories
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/external/msgpack11
+  ${CMAKE_CURRENT_SOURCE_DIR}/external/json/single_include
+)
+
+# Add msgpack11 library
+add_library(msgpack11
+  ${CMAKE_CURRENT_SOURCE_DIR}/external/msgpack11/msgpack11.cpp
+)
 
 # Add MCP library
 add_library(mcp 
   src/mcp/IMCPBroker.cpp
   src/mcp/MCPBroker.cpp
+  src/mcp/MCPSerialization.cpp
+)
+
+# Link against msgpack11
+target_link_libraries(mcp
+  PRIVATE
+  msgpack11
 )
 
 # Set include directory for MCP

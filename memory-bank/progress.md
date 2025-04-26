@@ -1,103 +1,93 @@
-# VCV Rack MCP - Progress
+# VCV Rack MCP - Progress Tracker
 
-## Current Status: Phase 1, Sprint 2 Complete (40% Implementation Complete)
+## Project Phase Status
 
-The project has completed Phase 1, Sprint 2 implementation. We have successfully added subscription functionality to the broker, including the IMCPSubscriber_V1 interface and related lifecycle management. All new functionality has been thoroughly tested with an expanded suite of unit tests.
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Core Infrastructure | ✅ 100% Complete |
+| Phase 2 | Message Exchange | 🟨 50% Complete |
+| Phase 3 | Advanced Features | ⬜ Planned |
+| Phase 4 | Optimization & Finalization | ⬜ Planned |
 
-## Project Implementation Timeline
+## Sprint Completion
 
-| Phase | Status | Progress | Target Completion |
-|-------|--------|----------|-------------------|
-| Requirements Documentation | ✅ Complete | 100% | Completed |
-| Architecture Design | ✅ Complete | 100% | Completed |
-| Development Planning | ✅ Complete | 100% | Completed |
-| Phase 1: Core Broker & API Foundation | 🔄 In Progress | 100% | Completed |
-| ↳ Sprint 1: Broker & Registration | ✅ Complete | 100% | Completed |
-| ↳ Sprint 2: Subscription & Lifecycle | ✅ Complete | 100% | Completed |
-| Phase 2: Serialization & Pub/Sub Flow | 🔄 Not Started | 0% | [Future Date] |
-| ↳ Sprint 3: Message Structure & Serialization | 🔄 Not Started | 0% | [Future Date] |
-| ↳ Sprint 4: Basic Publish & Receive | 🔄 Not Started | 0% | [Future Date] |
-| Phase 3: Reference Implementation & Docs | 🔄 Not Started | 0% | [Future Date] |
-| Phase 4: Testing & Refinement | 🔄 Not Started | 0% | [Future Date] |
-| Phase 5: SDK Integration & Release | 🔄 Not Started | 0% | [Future Date] |
+### Phase 1: Core Infrastructure
 
-## What Works
+#### Sprint 1: Core Broker & Provider Registry (✅ 100% Complete)
+- ✅ Define IMCPBroker_V1 interface
+- ✅ Define IMCPProvider_V1 interface
+- ✅ Implement MCPBroker singleton
+- ✅ Implement provider registration/lookup
+- ✅ Create unit tests for broker functionality
+- ✅ Add thread safety for registry operations
 
-The following components have been successfully implemented:
+#### Sprint 2: Subscription & Basic Lifecycle (✅ 100% Complete)
+- ✅ Define IMCPSubscriber_V1 interface
+- ✅ Add subscription functionality to broker
+- ✅ Implement topic-based subscription storage
+- ✅ Add thread safety for subscription operations
+- ✅ Implement weak reference handling
+- ✅ Create unit tests for subscription management
 
-- ✅ Core project structure with CMake build system
-- ✅ Interface definitions:
-  - `IMCPBroker`: Main broker interface with registration, subscription, and discovery functions
-  - `IMCPProvider_V1`: Interface for modules providing contextual information
-  - `IMCPSubscriber_V1`: Interface for modules subscribing to contextual information
-- ✅ Broker implementation:
-  - Thread-safe singleton pattern
-  - Topic registration and unregistration
-  - Subscription management (subscribe, unsubscribe, unsubscribeAll)
-  - Topic discovery
-  - Provider lookup
-- ✅ Thread safety:
-  - Mutex protection for registry operations
-  - Mutex protection for subscription operations
-  - Proper handling of concurrent access
-  - Tested with multi-threaded stress tests
-- ✅ Weak reference handling:
-  - Automatic cleanup of expired provider references
-  - Automatic cleanup of expired subscriber references
-  - Proper memory management
-- ✅ Unit tests:
-  - Basic functionality testing
-  - Edge case handling
-  - Thread safety verification
-  - Subscription management testing
-- ✅ Initial API documentation
-- ✅ Example program demonstrating basic registry operations
+### Phase 2: Message Exchange
 
-## What's Left to Build
+#### Sprint 3: Message Structure & Serialization (✅ 100% Complete)
+- ✅ Define MCPMessage_V1 struct
+- ✅ Integrate MessagePack for serialization
+- ✅ Add JSON serialization support for debugging
+- ✅ Implement helper functions for serialization/deserialization
+- ✅ Create unit tests for message format and serialization
+- ✅ Update API documentation with message structure details
 
-### Phase 2: Serialization & Pub/Sub Flow
-- [ ] `MCPMessage_V1` structure definition
-- [ ] MessagePack integration
-- [ ] JSON serialization support
-- [ ] Publish functionality
-- [ ] Worker thread message dispatch
-- [ ] Subscriber notification
+#### Sprint 4: Message Dispatch (🟨 In Progress)
+- ⬜ Add publish method to broker interface and implementation
+- ⬜ Create worker thread for message dispatch
+- ⬜ Implement message delivery to subscribers
+- ⬜ Add thread safety for message queue
+- ⬜ Create unit tests for publish/subscribe flow
+- ⬜ Update documentation with dispatch examples
 
-### Phase 3: Reference Implementation & Docs
-- [ ] Reference provider module
-- [ ] Reference subscriber module
-- [ ] Complete developer documentation
-- [ ] API usage examples
+### Phase 3: Advanced Features
 
-### Phase 4: Testing & Refinement
-- [ ] Performance testing
-- [ ] Thread-safety verification
-- [ ] Error handling enhancement
-- [ ] API stabilization
+#### Sprint 5: Error Handling & Recovery (⬜ Planned)
+- ⬜ Add comprehensive error codes
+- ⬜ Implement error handling in broker
+- ⬜ Add recovery mechanisms for common failures
+- ⬜ Create diagnostics functions
+- ⬜ Add unit tests for error conditions
+- ⬜ Update documentation with error handling
 
-### Phase 5: SDK Integration & Release
-- [ ] VCV Rack SDK integration
-- [ ] Final documentation
-- [ ] Release preparation
+#### Sprint 6: Performance Optimization (⬜ Planned)
+- ⬜ Profile message dispatch performance
+- ⬜ Optimize serialization/deserialization
+- ⬜ Implement message batching
+- ⬜ Add performance benchmark suite
+- ⬜ Create documentation for performance best practices
 
-## Known Issues
+## Current Status
 
-No significant issues have been encountered during implementation so far. 
+### What Works
+- ✅ Broker singleton creation and access
+- ✅ Provider registration and lookup
+- ✅ Topic-based subscription
+- ✅ Lifecycle management with weak references
+- ✅ Message structure definition
+- ✅ MessagePack and JSON serialization
+- ✅ Serialization helper functions
 
-Potential areas to monitor:
+### What's Left to Build
+- ⬜ Message publication and dispatch system
+- ⬜ Worker thread for asynchronous delivery
+- ⬜ Comprehensive error handling
+- ⬜ Performance optimizations
+- ⬜ Integration examples
+- ⬜ Full API documentation
 
-1. **Performance Impact**: We need to ensure registry and subscription operations remain efficient even with a large number of topics and subscribers.
+### Known Issues
+- None currently
 
-2. **Memory Management**: While the weak reference system works well, we should monitor for any potential memory leaks or reference cycles.
-
-3. **Thread Safety**: Current mutex-based approach is working, but we should continually evaluate if it scales well with increased concurrency.
-
-## Next Milestones
-
-1. **Sprint 3: Message Structure** - Define the MCPMessage_V1 structure to prepare for adding serialization support.
-
-2. **Sprint 3: Serialization** - Integrate MessagePack for efficient data exchange between modules.
-
-3. **Sprint 4: Pub/Sub Flow** - Implement the publish functionality and message dispatch worker thread.
-
-4. **Sprint 4: Subscriber Notification** - Implement the subscriber notification mechanism. 
+## Next Steps
+1. Implement the publish method in the MCPBroker
+2. Create a worker thread for message dispatch
+3. Implement thread-safe message queue
+4. Build unit tests for the dispatch system 
