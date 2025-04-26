@@ -1,0 +1,88 @@
+# VCV Rack MCP Project Intelligence
+
+## Project Patterns
+
+1. **File Organization**
+   - Headers (.h) contain interface definitions and class declarations
+   - Implementation files (.cpp) contain the actual implementation
+   - Test files are organized in a parallel test/ directory structure
+   - Example code in examples/ directory
+
+2. **Naming Conventions**
+   - Interfaces are prefixed with 'I' (e.g., IMCPBroker, IMCPProvider_V1)
+   - Version numbers are indicated with _V1, _V2, etc.
+   - Private member variables are prefixed with 'm_'
+   - Static functions/variables are prefixed with 's_'
+
+3. **Critical Paths**
+   - Audio thread functions must be real-time safe (non-blocking, no dynamic memory allocation)
+   - Worker threads handle all potentially blocking operations
+   - Thread communication uses lock-free data structures where possible
+
+4. **Documentation Style**
+   - Public API functions use detailed Doxygen-style comments
+   - Implementation files contain explanatory comments for complex logic
+   - Non-obvious thread-safety considerations are explicitly documented
+
+5. **Design Patterns**
+   - Singleton pattern for the broker with thread-safe initialization
+   - Publisher/Subscriber pattern for communication
+   - RAII for resource management
+   - Weak references for lifecycle management
+
+## Known Challenges
+
+1. **Thread Safety**
+   - The broker must handle concurrent access from multiple modules
+   - Registry updates and message dispatch must be thread-safe
+   - Worker threads must not block the audio thread
+   - Use separate mutexes for different concerns (instance creation vs. registry operations)
+
+2. **Real-time Constraints**
+   - Functions called from the audio thread must complete quickly
+   - No dynamic memory allocation in the audio thread
+   - No locks contended with the audio thread
+
+3. **API Design**
+   - Balance between simplicity for basic usage and power for complex cases
+   - Clear versioning strategy for future evolution
+   - Comprehensive error handling without excessive complexity
+
+4. **Memory Management**
+   - Use weak references for provider/subscriber relationships
+   - Automatic cleanup of expired references
+   - Careful singleton management to prevent memory leaks
+
+## Development Environment
+
+- C++14 compatibility required for VCV Rack integration
+- CMake 3.15+ for build system
+- Google Test for unit testing
+- MessagePack (future) for serialization
+
+## Implementation Notes
+
+1. **Broker Singleton**
+   - Implemented with thread-safe initialization using std::mutex
+   - Public constructor with std::make_shared for proper lifecycle
+   - Maintains weak references to providers/subscribers
+
+2. **Message Dispatch**
+   - Worker thread processes message queue
+   - Messages are dispatched to subscribers off the audio thread
+   - Subscribers use ring buffers to communicate with their audio threads
+
+3. **Serialization**
+   - MessagePack is primary format for efficiency
+   - JSON is secondary format for debugging
+   - Helper functions simplify common serialization tasks
+
+4. **CMake Configuration**
+   - FetchContent for Google Test dependency
+   - Separate directories for include, src, test, and examples
+   - PUBLIC visibility for interface headers
+
+5. **Testing Strategy**
+   - Unit tests for core functionality
+   - Thread safety tests with multiple concurrent threads
+   - Lifecycle tests for proper cleanup 
