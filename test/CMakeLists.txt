@@ -23,4 +23,18 @@ target_link_libraries(serialization_tests
   gtest_main
 )
 
-add_test(NAME serialization_tests COMMAND serialization_tests) 
+add_test(NAME serialization_tests COMMAND serialization_tests)
+
+# Add publish/subscribe tests
+add_executable(pubsub_tests
+  mcp/PublishSubscribeTests.cpp
+)
+
+target_link_libraries(pubsub_tests
+  PRIVATE
+  mcp
+  gtest
+  gtest_main
+)
+
+add_test(NAME pubsub_tests COMMAND pubsub_tests) 

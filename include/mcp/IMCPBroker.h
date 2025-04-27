@@ -110,6 +110,19 @@ public:
                                                 const std::string& topic) const = 0;
 
     /**
+     * @brief Publish a message to the MCP system.
+     * 
+     * This function is called by provider modules to publish a message for a specific topic.
+     * The message will be delivered to all subscribers of the topic. This function is
+     * thread-safe and can be called from any thread. The message delivery happens
+     * asynchronously on a worker thread.
+     * 
+     * @param message A shared pointer to the message to publish.
+     * @return bool True if the message was queued successfully, false otherwise.
+     */
+    virtual bool publish(std::shared_ptr<MCPMessage_V1> message) = 0;
+
+    /**
      * @brief Get the API version of the broker.
      * 
      * This function returns the version number of the broker implementation.

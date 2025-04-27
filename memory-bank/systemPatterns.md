@@ -18,6 +18,7 @@ A globally accessible, thread-safe singleton object responsible for:
 │ - topicRegistry: map<string, providers>   │
 │ - subscriptions: map<topic, subscribers>  │
 │ - messageQueue: queue<MCPMessage_V1>      │
+│ - workerThread: thread                    │
 │                                           │
 │ + registerContext(topic, provider)        │
 │ + unregisterContext(topic, provider)      │
@@ -27,7 +28,7 @@ A globally accessible, thread-safe singleton object responsible for:
 │ + getAvailableTopics()                    │
 │ + findProviders(topic)                    │
 ├───────────────────────────────────────────┤
-│               Thread Safety                │
+│      Thread Safety & Asynchronous Dispatch │
 └───────────────────────────────────────────┘
 ```
 
@@ -79,6 +80,27 @@ Defines the format for message exchange:
 └───────────────────────────────────────────┘
 ```
 
+### 5. Worker Thread and Message Queue
+
+Handles asynchronous message processing:
+- Processes messages off the audio thread
+- Ensures real-time safety for audio processing
+- Manages subscriber notification
+
+```
+┌───────────────────────────────────────────┐
+│          Worker Thread System             │
+├───────────────────────────────────────────┤
+│ - messageQueue: queue<MCPMessage_V1>      │
+│ - queueMutex: mutex                       │
+│ - queueCondition: condition_variable      │
+│ - threadRunning: atomic<bool>             │
+│                                           │
+│ + processMessageQueue()                   │
+│ + deliverMessage(message)                 │
+└───────────────────────────────────────────┘
+```
+
 ## Key Technical Decisions
 
 ### 1. Communication Pattern: Publish/Subscribe
@@ -91,36 +113,85 @@ The MCP uses a publish/subscribe pattern where:
 ### 2. Thread Safety & Real-time Audio Considerations
 
 - The broker uses appropriate locking (mutex) to ensure thread-safe registry updates
-- Message dispatch occurs off the audio thread via worker threads
-- Communication between MCP worker threads and audio threads in modules uses lock-free ring buffers
+- Message dispatch occurs off the audio thread via a worker thread
+- Communication between MCP worker thread and audio threads in modules uses lock-free ring buffers
 - API functions called from the audio thread must be non-blocking and have predictable execution time
+- The message queue is protected by a mutex to ensure thread-safe access
+- A condition variable is used for efficient worker thread waiting
 
-### 3. Data Serialization
+### 3. Message Queue Operation
+
+- **Publishing**: Thread-safe enqueuing of messages
+  - Acquires queue mutex
+  - Adds message to the queue
+  - Notifies worker thread using condition variable
+  - Returns immediately (non-blocking)
+
+- **Processing**: Worker thread message handling
+  - Waits efficiently using condition variable
+  - Processes messages in FIFO order
+  - Delivers to subscribers without holding locks
+  - Catches and handles exceptions
+
+### 4. Data Serialization
 
 - MessagePack is the primary serialization format for its efficiency and compact representation
 - JSON is supported as a secondary format for human-readable debugging
 - Format identification in message headers allows for potential future formats
 
-### 4. Lifecycle Management
+### 5. Lifecycle Management
 
 - Module addition/removal is integrated with VCV Rack lifecycle events
 - Proper cleanup occurs when modules are removed
 - Weak references prevent memory leaks and dangling pointers
+- Worker thread is cleanly terminated when the broker is destroyed
 
-## Component Relationships
+## Component Relationships and Data Flow
 
 ```
 ┌─────────────────┐        registers topics       ┌──────────────┐
 │ Provider Module │◄─────────────────────────────►│  MCP Broker  │
 └────────┬────────┘                               └──────┬───────┘
          │                                               │
-         │ publishes                                     │ dispatches
-         │ updates                                       │ to subscribers
+         │ publishes                                     │ queues in
+         │ messages                                      │ message queue
          │                                               │
          │                                               ▼
-         │                          subscribes    ┌──────────────┐
-         └─────────────────────────────────────► │   Subscriber  │
+         │                                        ┌──────────────┐
+         └─────────────────────────────────────► │ Worker Thread │
+                                                  └──────┬───────┘
+                                                         │
+                                                         │ dispatches to
+                                                         │ subscribers
+                                                         │
+                                                         ▼
+                                                  ┌──────────────┐
+                                                  │  Subscribers │
                                                   └──────────────┘
+```
+
+### Message Flow Sequence
+
+```
+┌───────────┐          ┌──────────┐          ┌───────────┐          ┌────────────┐
+│  Provider │          │  Broker  │          │  Worker   │          │ Subscriber │
+└─────┬─────┘          └────┬─────┘          └─────┬─────┘          └──────┬─────┘
+      │                     │                      │                        │
+      │ publish(message)    │                      │                        │
+      │────────────────────►│                      │                        │
+      │                     │                      │                        │
+      │                     │ queue message        │                        │
+      │                     │◄───────────────────► │                        │
+      │                     │                      │                        │
+      │                     │ notify()             │                        │
+      │                     │────────────────────► │                        │
+      │                     │                      │                        │
+      │                     │                      │ process message        │
+      │                     │                      │◄─────────────────────► │
+      │                     │                      │                        │
+      │                     │                      │ onMCPMessage(message)  │
+      │                     │                      │────────────────────────►
+      │                     │                      │                        │
 ```
 
 ## Design Patterns in Use
@@ -143,16 +214,23 @@ A variation of the Observer pattern where:
 - The broker handles message routing based on topics
 - Subjects (providers) are decoupled from the specific observers (subscribers)
 
-### 4. Interface Segregation
+### 4. Producer/Consumer Pattern
 
-The system uses distinct interfaces for different roles:
-- `IMCPProvider_V1` for modules that provide data
-- `IMCPSubscriber_V1` for modules that consume data
-- This allows modules to implement only what they need
+For message queue processing:
+- Providers (and broker) act as producers, adding to the queue
+- Worker thread acts as the consumer, processing messages
+- Condition variable synchronizes the producer and consumer
 
 ### 5. Thread-safe Queue Pattern
 
 For worker thread communication with the audio thread:
 - Lock-free ring buffers (`rack::dsp::RingBuffer`) ensure real-time safe communication
 - Publishing happens on any thread but processing occurs off the audio thread
-- This ensures audio processing is not disrupted by MCP operations 
+- This ensures audio processing is not disrupted by MCP operations
+
+### 6. Interface Segregation
+
+The system uses distinct interfaces for different roles:
+- `IMCPProvider_V1` for modules that provide data
+- `IMCPSubscriber_V1` for modules that consume data
+- This allows modules to implement only what they need 

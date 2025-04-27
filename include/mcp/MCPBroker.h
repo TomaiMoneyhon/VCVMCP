@@ -7,6 +7,10 @@
 #include <mutex>
 #include <memory>
 #include <unordered_map>
+#include <queue>
+#include <condition_variable>
+#include <thread>
+#include <atomic>
 
 namespace mcp {
 
@@ -64,9 +68,17 @@ public:
     std::vector<std::shared_ptr<IMCPProvider_V1>> findProviders(
                                         const std::string& topic) const override;
     
+    bool publish(std::shared_ptr<MCPMessage_V1> message) override;
+    
     int getVersion() const override;
 
 private:
+    // Worker thread function for processing the message queue
+    void processMessageQueue();
+
+    // Helper to deliver a message to all subscribers of a topic
+    void deliverMessage(std::shared_ptr<MCPMessage_V1> message);
+
     // Prevent copying/moving
     MCPBroker(const MCPBroker&) = delete;
     MCPBroker& operator=(const MCPBroker&) = delete;
@@ -88,6 +100,15 @@ private:
                                            std::vector<std::weak_ptr<IMCPSubscriber_V1>>>;
     mutable std::mutex m_subscriptionMutex;
     SubscriberMap m_subscriptions;
+
+    // Message queue for publish/subscribe
+    std::queue<std::shared_ptr<MCPMessage_V1>> m_messageQueue;
+    std::mutex m_queueMutex;
+    std::condition_variable m_queueCondition;
+    
+    // Worker thread for processing messages
+    std::thread m_workerThread;
+    std::atomic<bool> m_threadRunning;
 };
 
 } // namespace mcp 

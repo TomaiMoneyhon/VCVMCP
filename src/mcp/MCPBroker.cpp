@@ -1,4 +1,5 @@
 #include "mcp/MCPBroker.h"
+#include "mcp/MCPMessage_V1.h"
 #include <algorithm>
 
 namespace mcp {
@@ -15,12 +16,25 @@ std::shared_ptr<MCPBroker> MCPBroker::getInstance() {
     return s_instance;
 }
 
-MCPBroker::MCPBroker() {
-    // Initialization if needed
+MCPBroker::MCPBroker() : m_threadRunning(true) {
+    // Start the worker thread for message processing
+    m_workerThread = std::thread(&MCPBroker::processMessageQueue, this);
 }
 
 MCPBroker::~MCPBroker() {
-    // Cleanup if needed
+    // Signal the worker thread to stop
+    {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        m_threadRunning = false;
+    }
+    
+    // Wake up the worker thread so it can exit
+    m_queueCondition.notify_one();
+    
+    // Wait for the worker thread to finish
+    if (m_workerThread.joinable()) {
+        m_workerThread.join();
+    }
 }
 
 bool MCPBroker::registerContext(const std::string& topic, 
@@ -230,6 +244,116 @@ std::vector<std::shared_ptr<IMCPProvider_V1>> MCPBroker::findProviders(
     }
     
     return result;
+}
+
+bool MCPBroker::publish(std::shared_ptr<MCPMessage_V1> message) {
+    // Validate the message
+    if (!message || message->topic.empty() || !message->data) {
+        return false;
+    }
+    
+    // Queue the message for processing by the worker thread
+    {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        
+        // Only queue the message if the worker thread is running
+        if (!m_threadRunning) {
+            return false;
+        }
+        
+        m_messageQueue.push(message);
+    }
+    
+    // Notify the worker thread that there's a new message
+    m_queueCondition.notify_one();
+    
+    return true;
+}
+
+void MCPBroker::processMessageQueue() {
+    while (true) {
+        std::shared_ptr<MCPMessage_V1> message;
+        
+        // Wait for a message or shutdown signal
+        {
+            std::unique_lock<std::mutex> lock(m_queueMutex);
+            
+            m_queueCondition.wait(lock, [this] {
+                return !m_messageQueue.empty() || !m_threadRunning;
+            });
+            
+            // Check if we should exit
+            if (!m_threadRunning && m_messageQueue.empty()) {
+                break;
+            }
+            
+            // Get the next message
+            if (!m_messageQueue.empty()) {
+                message = m_messageQueue.front();
+                m_messageQueue.pop();
+            }
+        }
+        
+        // Process the message if we got one
+        if (message) {
+            try {
+                deliverMessage(message);
+            } catch (const std::exception& e) {
+                // Log error but continue processing
+                // In a real implementation, this would log to a proper error reporting system
+                // For now, we just catch and continue to avoid crashing the worker thread
+            }
+        }
+    }
+}
+
+void MCPBroker::deliverMessage(std::shared_ptr<MCPMessage_V1> message) {
+    // Get a copy of the subscribers to avoid holding the lock during callbacks
+    std::vector<std::shared_ptr<IMCPSubscriber_V1>> subscribers;
+    
+    {
+        std::lock_guard<std::mutex> lock(m_subscriptionMutex);
+        
+        // Find subscribers for this topic
+        auto topicIt = m_subscriptions.find(message->topic);
+        if (topicIt != m_subscriptions.end()) {
+            const auto& weakSubscribers = topicIt->second;
+            
+            // Lock all weak pointers to get shared_ptr
+            for (const auto& weakSubscriber : weakSubscribers) {
+                if (auto subscriber = weakSubscriber.lock()) {
+                    subscribers.push_back(subscriber);
+                }
+            }
+            
+            // Clean up expired subscribers if needed
+            if (subscribers.size() != weakSubscribers.size()) {
+                auto& mutableSubscribers = topicIt->second;
+                mutableSubscribers.erase(
+                    std::remove_if(mutableSubscribers.begin(), mutableSubscribers.end(),
+                        [](const std::weak_ptr<IMCPSubscriber_V1>& weakSubscriber) {
+                            return weakSubscriber.expired();
+                        }),
+                    mutableSubscribers.end()
+                );
+                
+                // Remove the topic if no subscribers left
+                if (mutableSubscribers.empty()) {
+                    m_subscriptions.erase(topicIt);
+                }
+            }
+        }
+    }
+    
+    // Deliver the message to each subscriber
+    for (const auto& subscriber : subscribers) {
+        try {
+            subscriber->onMCPMessage(message.get());
+        } catch (const std::exception& e) {
+            // Log error but continue delivering to other subscribers
+            // In a real implementation, this would log to a proper error reporting system
+        }
+    }
 }
 
 int MCPBroker::getVersion() const {

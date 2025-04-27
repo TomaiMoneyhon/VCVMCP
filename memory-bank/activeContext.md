@@ -1,82 +1,90 @@
-# VCV Rack MCP Active Context
+# VCV Rack MCP - Active Development Context
 
 ## Current Focus
 
-We are now transitioning from Sprint 3 (Message Structure & Serialization) to Sprint 4 (Message Dispatch) in Phase 2 of the VCV Rack MCP development.
+We're currently in Phase 3, Sprint 5 of the MCP development, focusing on creating reference implementations of providers and subscribers that demonstrate the full functionality of the framework. This includes:
 
-### Just Completed: Sprint 3 - Message Structure & Serialization
-- ✅ Defined the MCPMessage_V1 struct for exchanging data between modules
-- ✅ Integrated msgpack11 library for efficient binary serialization
-- ✅ Implemented serialization/deserialization helper functions
-- ✅ Created template functions for common data types
-- ✅ Developed helper functions for message creation and data extraction
-- ✅ Created comprehensive unit tests for all serialization functionality
-- ✅ All tests pass successfully for broker functionality and serialization
+1. **Reference Provider Implementation** (60% complete)
+   - Created basic provider class structure
+   - Implemented registration with broker
+   - Completed serialization helpers for various data types
+   - Implemented publishing interface
+   - Working on periodic message publishing mechanism
+   - Implementing data generation for example messages
 
-### Up Next: Sprint 4 - Message Dispatch
-- Add the publish method to the broker interface and implementation
-- Create a worker thread for asynchronous message delivery
-- Implement message dispatch to registered subscribers
-- Ensure thread safety for message queue operations
-- Add comprehensive unit tests for the dispatch system
-- Update API documentation with publish/receive examples
+2. **Reference Subscriber Implementation** (40% complete)
+   - Created basic subscriber structure
+   - Implemented message handling and callback functionality
+   - Successfully demonstrated deserialization of various data types
+   - Working on thread-safe data passing from worker thread to audio thread
+   - Need to implement processing of deserialized data in audio thread context
+
+3. **Integration Examples** (30% complete)
+   - Created complete serialization example demonstrating end-to-end workflow
+   - Successfully tested message publishing and receiving with serialized data
+   - Need to implement comprehensive reference implementation with thread safety focus
+   - Planning additional tests for more complex data types and higher message volumes
 
 ## Recent Changes
 
-1. Defined the MCPMessage_V1 structure with:
-   - Topic string for message routing
-   - Sender module ID for origin tracking
-   - Data format identifier (MSGPACK/JSON/BINARY)
-   - Raw data buffer (std::shared_ptr<void>) and size
+1. **Completed Serialization Implementation**
+   - Successfully integrated msgpack11 library for lightweight binary serialization
+   - Created and tested comprehensive serialization helpers for common data types
+   - Implemented extractMessageData for type-safe deserialization
+   - Developed complete serialization example demonstrating the workflow
+   - Verified all serialization, broker, and publish/subscribe tests pass
 
-2. Implemented serialization helpers:
-   - MessagePack serialization using msgpack11 library
-   - Template functions for various data types (strings, integers, floats, arrays)
-   - Helper functions to create messages with serialized data
-   - Functions to extract and deserialize data from messages
+2. **Successful End-to-End Message Flow**
+   - Demonstrated full publish/subscribe workflow with serialized data
+   - Confirmed topic registration and subscription work correctly
+   - Implemented and tested serialized message publishing
+   - Verified message receipt and deserialization in subscribers
+   - Ensured proper cleanup of resources
 
-3. Created a robust testing framework:
-   - Unit tests for MCPMessage_V1 structure
-   - Tests for MessagePack serialization with simple types and arrays
-   - Tests for message creation and data extraction
-   - Tests for error handling and edge cases
+## Active Development
 
-## Active Decisions
+### Technical Decisions
 
-1. **Message Format**: 
-   - Using MessagePack as primary serialization format via msgpack11
-   - Added placeholder for JSON functionality for future extension
-   - MCPMessage_V1 uses std::shared_ptr<void> for flexible data storage
-   - DataFormat enum identifies the serialization format used
+1. **Serialization Strategy**
+   - Using msgpack11 for binary serialization due to its lightweight nature and simple API
+   - Created helper functions that abstract away serialization complexity
+   - Implemented type-safe interfaces for serialization and deserialization
+   - Focused on common data types (strings, numbers, vectors) with easy extensibility
 
-2. **Thread Safety**:
-   - Message serialization occurs outside the audio thread
-   - Worker thread will handle message dispatch (upcoming in Sprint 4)
-   - Lock-free approach planned for audio thread communication
+2. **Provider/Subscriber Design**
+   - Reference implementations demonstrate proper usage patterns
+   - Including error handling for serialization/deserialization failures
+   - Showing lifecycle management (registration, publication, subscription, cleanup)
+   - Emphasizing thread safety for cross-thread communication
 
-3. **Error Handling**:
-   - MCPSerializationError class implemented for serialization error reporting
-   - Comprehensive error checking in serialization/deserialization functions
-   - More extensive error handling planned for Sprint 5
+3. **Testing Focus**
+   - Unit tests for all components
+   - Integration tests showing full workflow
+   - Examples serving as both documentation and validation
 
-## Next Considerations
+### Immediate Next Steps
 
-1. **Worker Thread Design**:
-   - How to implement efficient message dispatch?
-   - What thread synchronization primitives to use?
-   - How to handle thread termination gracefully?
+1. Complete the thread-safe data passing mechanism in reference subscriber (using dsp::RingBuffer)
+2. Implement periodic publishing in the reference provider
+3. Create comprehensive integration tests with more complex data structures
+4. Add detailed comments and documentation in the example code
+5. Update API documentation to reflect the complete workflow
 
-2. **Publish API Design**:
-   - Should publish be synchronous or asynchronous?
-   - How to handle delivery failures?
-   - What guarantees should the API provide about delivery?
+### Upcoming Milestones
 
-3. **Testing Strategy**:
-   - How to test concurrent message publishing?
-   - How to verify correct thread behavior?
-   - How to simulate various error conditions?
+1. **Complete Sprint 5** (Reference Implementations) - ETA: 1 week
+2. **Begin Sprint 6** (Documentation) - including Developer's Guide and Best Practices
+3. **Prepare for Phase 4** (Integration & Refinement) - VCV Rack integration and optimization
 
-4. **Performance Optimization**:
-   - Should we use pre-allocated message pools?
-   - How to minimize copying of large messages?
-   - Should we implement message batching for efficiency? 
+## Development Priorities
+
+1. Thread safety for audio thread integration
+2. Comprehensive examples for module developers
+3. Performance optimization
+4. Documentation quality
+5. Error handling robustness
+
+## Team Communication
+- Regular updates on reference implementation progress
+- Discussion of best practices based on serialization example learnings
+- Planning documentation structure based on implementation experience 
