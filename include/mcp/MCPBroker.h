@@ -34,6 +34,14 @@ public:
     static std::shared_ptr<MCPBroker> getInstance();
 
     /**
+     * @brief Release the singleton instance.
+     * 
+     * This method should be called before program exit to ensure proper cleanup.
+     * It releases the static instance pointer, allowing the broker to be destroyed.
+     */
+    static void releaseInstance();
+
+    /**
      * @brief Constructor.
      * 
      * Made public to allow std::make_shared to work.
@@ -71,6 +79,17 @@ public:
     bool publish(std::shared_ptr<MCPMessage_V1> message) override;
     
     int getVersion() const override;
+
+    /**
+     * @brief Clear all registries and message queues.
+     * 
+     * This method is used during shutdown to ensure clean cleanup.
+     * It clears the topic registry, subscriptions, and message queue.
+     */
+    void clearAllRegistries();
+
+    // Friend function declaration for shutdown helper
+    friend void shutdownMCPBroker();
 
 private:
     // Worker thread function for processing the message queue
@@ -110,5 +129,14 @@ private:
     std::thread m_workerThread;
     std::atomic<bool> m_threadRunning;
 };
+
+/**
+ * @brief Helper function for proper broker shutdown.
+ * 
+ * This function provides a safe way to shut down the broker,
+ * ensuring all resources are properly cleaned up. It should
+ * be called before program exit.
+ */
+void shutdownMCPBroker();
 
 } // namespace mcp 

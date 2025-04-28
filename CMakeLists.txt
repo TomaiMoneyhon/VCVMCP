@@ -33,6 +33,9 @@ add_library(mcp
   src/mcp/IMCPBroker.cpp
   src/mcp/MCPBroker.cpp
   src/mcp/MCPSerialization.cpp
+  src/rack/framework/mock.cpp
+  src/mcp/MCPReferenceProvider.cpp
+  src/mcp/MCPReferenceSubscriber.cpp
 )
 
 # Link against msgpack11
@@ -61,6 +64,17 @@ if(BUILD_TESTING)
     GIT_REPOSITORY https://github.com/google/googletest.git
     GIT_TAG release-1.11.0
   )
+  
+  # Prevent overriding parent project's compiler/linker settings
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  
+  # For Windows: Prevent overriding the parent project's compiler/linker settings
+  set(gtest_disable_pthreads ON CACHE BOOL "" FORCE)
+  
+  # Don't install GoogleTest when installing the project
+  set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+  
+  # Make GoogleTest available
   FetchContent_MakeAvailable(googletest)
   
   # Add test directory

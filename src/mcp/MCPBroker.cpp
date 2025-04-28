@@ -11,9 +11,34 @@ std::mutex MCPBroker::s_instanceMutex;
 std::shared_ptr<MCPBroker> MCPBroker::getInstance() {
     std::lock_guard<std::mutex> lock(s_instanceMutex);
     if (!s_instance) {
+        // Use make_shared instead of shared_ptr(new MCPBroker()) for exception safety
         s_instance = std::make_shared<MCPBroker>();
     }
     return s_instance;
+}
+
+void MCPBroker::releaseInstance() {
+    std::lock_guard<std::mutex> lock(s_instanceMutex);
+    s_instance.reset();
+}
+
+// Helper function for proper broker shutdown
+void shutdownMCPBroker() {
+    // First get the instance without creating a new one if it doesn't exist
+    std::shared_ptr<MCPBroker> instance;
+    {
+        std::lock_guard<std::mutex> lock(MCPBroker::s_instanceMutex);
+        instance = MCPBroker::s_instance;
+    }
+    
+    // If there's an instance, clean it up
+    if (instance) {
+        // First clear all registries
+        instance->clearAllRegistries();
+        
+        // Now release the singleton
+        MCPBroker::releaseInstance();
+    }
 }
 
 MCPBroker::MCPBroker() : m_threadRunning(true) {
@@ -22,10 +47,26 @@ MCPBroker::MCPBroker() : m_threadRunning(true) {
 }
 
 MCPBroker::~MCPBroker() {
+    // First clear all registries to prevent callbacks to destroyed objects
+    {
+        std::lock_guard<std::mutex> lock(m_registryMutex);
+        m_topicRegistry.clear();
+    }
+    
+    {
+        std::lock_guard<std::mutex> lock(m_subscriptionMutex);
+        m_subscriptions.clear();
+    }
+    
     // Signal the worker thread to stop
     {
         std::lock_guard<std::mutex> lock(m_queueMutex);
         m_threadRunning = false;
+        
+        // Clear any pending messages
+        while (!m_messageQueue.empty()) {
+            m_messageQueue.pop();
+        }
     }
     
     // Wake up the worker thread so it can exit
@@ -363,6 +404,29 @@ int MCPBroker::getVersion() const {
 // Global accessor function
 std::shared_ptr<IMCPBroker> getMCPBroker() {
     return MCPBroker::getInstance();
+}
+
+// Add this method to MCPBroker
+void MCPBroker::clearAllRegistries() {
+    // Clear topic registry
+    {
+        std::lock_guard<std::mutex> lock(m_registryMutex);
+        m_topicRegistry.clear();
+    }
+    
+    // Clear subscriptions
+    {
+        std::lock_guard<std::mutex> lock(m_subscriptionMutex);
+        m_subscriptions.clear();
+    }
+    
+    // Clear message queue
+    {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        while (!m_messageQueue.empty()) {
+            m_messageQueue.pop();
+        }
+    }
 }
 
 } // namespace mcp 

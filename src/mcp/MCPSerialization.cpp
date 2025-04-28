@@ -305,5 +305,25 @@ template std::shared_ptr<MCPMessage_V1> createMsgPackMessage<std::vector<float>>
 template std::shared_ptr<MCPMessage_V1> createJSONMessage<std::vector<float>>(const std::string& topic, int senderModuleId, const std::vector<float>& value);
 template std::vector<float> extractMessageData<std::vector<float>>(const MCPMessage_V1* message);
 
+// Template specializations for float
+template<>
+msgpack11::MsgPack mcp::serialization::convertToMsgPack<float>(const float& value) {
+    return msgpack11::MsgPack(static_cast<double>(value));
+}
+
+template<>
+float mcp::serialization::convertFromMsgPack<float>(const msgpack11::MsgPack& msgpack) {
+    if (!msgpack.is_number()) {
+        throw mcp::MCPSerializationError("Expected number in MsgPack");
+    }
+    return static_cast<float>(msgpack.number_value());
+}
+
+// Explicit instantiations for float
+template std::shared_ptr<void> mcp::serialization::serializeToMsgPack<float>(const float& value, std::size_t& dataSize);
+template float mcp::serialization::deserializeFromMsgPack<float>(const void* data, std::size_t dataSize);
+template std::shared_ptr<mcp::MCPMessage_V1> mcp::serialization::createMsgPackMessage<float>(const std::string& topic, int senderModuleId, const float& value);
+template float mcp::serialization::extractMessageData<float>(const mcp::MCPMessage_V1* message);
+
 } // namespace serialization
 } // namespace mcp 

@@ -136,46 +136,59 @@ int main() {
     std::cout << "MCP Serialization Example" << std::endl;
     std::cout << "=========================" << std::endl;
 
-    // Get broker instance
-    auto broker = mcp::MCPBroker::getInstance();
-    if (!broker) {
-        std::cerr << "Failed to get broker instance" << std::endl;
-        return 1;
+    // Scope for controlled resource lifetime
+    {
+        // Get broker instance
+        auto broker = mcp::MCPBroker::getInstance();
+        if (!broker) {
+            std::cerr << "Failed to get broker instance" << std::endl;
+            return 1;
+        }
+
+        // Create provider and subscriber
+        auto provider = std::make_shared<PresetProvider>(1001);  // Using numeric IDs
+        auto consumer1 = std::make_shared<PresetConsumer>(2001);
+        auto consumer2 = std::make_shared<PresetConsumer>(2002);
+
+        // Register provider for each topic
+        broker->registerContext("synth/presets", provider);
+        broker->registerContext("synth/parameters", provider);
+        std::cout << "Provider registered for topics" << std::endl;
+        
+        // Initialize subscribers
+        consumer1->initialize();
+        consumer2->initialize();
+
+        // Create and publish some data
+        provider->publishPresetName("Warm Pad");
+        
+        // Add a small delay to demonstrate async processing
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        
+        std::vector<float> parameters = {0.5f, 0.3f, 0.8f, 0.2f, 0.9f};
+        provider->publishParameters(parameters);
+        
+        // Another delay
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+        // Clean up
+        consumer1->cleanup();
+        consumer2->cleanup();
+        broker->unregisterContext("synth/presets", provider);
+        broker->unregisterContext("synth/parameters", provider);
+        std::cout << "Provider unregistered from topics" << std::endl;
+
+        std::cout << "Example completed successfully" << std::endl;
+        
+        // Release objects in controlled order
+        provider.reset();
+        consumer1.reset();
+        consumer2.reset();
+        broker.reset();
     }
-
-    // Create provider and subscriber
-    auto provider = std::make_shared<PresetProvider>(1001);  // Using numeric IDs
-    auto consumer1 = std::make_shared<PresetConsumer>(2001);
-    auto consumer2 = std::make_shared<PresetConsumer>(2002);
-
-    // Register provider for each topic
-    broker->registerContext("synth/presets", provider);
-    broker->registerContext("synth/parameters", provider);
-    std::cout << "Provider registered for topics" << std::endl;
     
-    // Initialize subscribers
-    consumer1->initialize();
-    consumer2->initialize();
-
-    // Create and publish some data
-    provider->publishPresetName("Warm Pad");
+    // Ensure broker is properly shut down
+    mcp::shutdownMCPBroker();
     
-    // Add a small delay to demonstrate async processing
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    
-    std::vector<float> parameters = {0.5f, 0.3f, 0.8f, 0.2f, 0.9f};
-    provider->publishParameters(parameters);
-    
-    // Another delay
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-    // Clean up
-    consumer1->cleanup();
-    consumer2->cleanup();
-    broker->unregisterContext("synth/presets", provider);
-    broker->unregisterContext("synth/parameters", provider);
-    std::cout << "Provider unregistered from topics" << std::endl;
-
-    std::cout << "Example completed successfully" << std::endl;
     return 0;
 } 

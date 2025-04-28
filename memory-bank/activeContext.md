@@ -1,90 +1,113 @@
-# VCV Rack MCP - Active Development Context
+# VCV Rack MCP - Active Context
 
-## Current Focus
+## Current Development Focus
 
-We're currently in Phase 3, Sprint 5 of the MCP development, focusing on creating reference implementations of providers and subscribers that demonstrate the full functionality of the framework. This includes:
+We are currently in **Phase 3: Reference Implementation & Documentation**, focusing on:
 
-1. **Reference Provider Implementation** (60% complete)
-   - Created basic provider class structure
-   - Implemented registration with broker
-   - Completed serialization helpers for various data types
-   - Implemented publishing interface
-   - Working on periodic message publishing mechanism
-   - Implementing data generation for example messages
-
-2. **Reference Subscriber Implementation** (40% complete)
-   - Created basic subscriber structure
-   - Implemented message handling and callback functionality
-   - Successfully demonstrated deserialization of various data types
-   - Working on thread-safe data passing from worker thread to audio thread
-   - Need to implement processing of deserialized data in audio thread context
-
-3. **Integration Examples** (30% complete)
-   - Created complete serialization example demonstrating end-to-end workflow
-   - Successfully tested message publishing and receiving with serialized data
-   - Need to implement comprehensive reference implementation with thread safety focus
-   - Planning additional tests for more complex data types and higher message volumes
+- **Sprint 6: Documentation** (30% complete)
+  - Updating API documentation with best practices
+  - Creating a comprehensive developer's guide
+  - Developing integration guides for VCV Rack module developers
+  - Documenting thread-safety patterns and practices
 
 ## Recent Changes
 
-1. **Completed Serialization Implementation**
-   - Successfully integrated msgpack11 library for lightweight binary serialization
-   - Created and tested comprehensive serialization helpers for common data types
-   - Implemented extractMessageData for type-safe deserialization
-   - Developed complete serialization example demonstrating the workflow
-   - Verified all serialization, broker, and publish/subscribe tests pass
+1. **Completed Sprint 5: Reference Provider & Subscriber**
+   - Successfully implemented `MCPReferenceProvider` with periodic publishing
+   - Implemented `MCPReferenceSubscriber` with thread-safe data passing
+   - Created functional example applications demonstrating full functionality
+   - Developed a mock VCV Rack framework for testing
+   - Added comprehensive test suite for reference implementations
+   - Demonstrated thread-safe data passing between worker and audio threads
 
-2. **Successful End-to-End Message Flow**
-   - Demonstrated full publish/subscribe workflow with serialized data
-   - Confirmed topic registration and subscription work correctly
-   - Implemented and tested serialized message publishing
-   - Verified message receipt and deserialization in subscribers
-   - Ensured proper cleanup of resources
+2. **Reference Implementation Features**
+   - Thread-safe ring buffer implementation for audio thread communication
+   - Multi-topic subscription and registration
+   - Thread identification and appropriate handling
+   - Various data generation patterns (sine waves, random walks, etc.)
+   - Proper lifecycle management (add/remove handling)
+   - Clear visualization and monitoring of data flow
+   - Resilient error handling and recovery
 
-## Active Development
+3. **Fixed Resource Management Issues**
+   - Resolved bad_weak_ptr exceptions during program shutdown
+   - Improved broker singleton lifecycle management
+   - Enhanced module lifecycle handling with proper destruction sequence
+   - Added safe shutdown helper function for the broker
+   - Fixed shared_from_this() usage in destructors
+   - Ensured proper ordering of resource cleanup
 
-### Technical Decisions
+## Active Decisions
 
-1. **Serialization Strategy**
-   - Using msgpack11 for binary serialization due to its lightweight nature and simple API
-   - Created helper functions that abstract away serialization complexity
-   - Implemented type-safe interfaces for serialization and deserialization
-   - Focused on common data types (strings, numbers, vectors) with easy extensibility
+1. **Documentation Strategy**
+   - Focus on real-world examples from the reference implementation
+   - Include code snippets and complete examples
+   - Provide thread-safety guidelines and best practices
+   - Document common pitfalls and how to avoid them
 
-2. **Provider/Subscriber Design**
-   - Reference implementations demonstrate proper usage patterns
-   - Including error handling for serialization/deserialization failures
-   - Showing lifecycle management (registration, publication, subscription, cleanup)
-   - Emphasizing thread safety for cross-thread communication
+2. **Error Handling Approach**
+   - Define clear error reporting mechanism for serialization issues
+   - Establish guidelines for error recovery
+   - Document appropriate error handling patterns
 
-3. **Testing Focus**
-   - Unit tests for all components
-   - Integration tests showing full workflow
-   - Examples serving as both documentation and validation
+3. **API Refinements**
+   - Consider adding helper functions for common tasks
+   - Improve function documentation with more examples
+   - Document thread-safety requirements and guarantees
 
-### Immediate Next Steps
+## Immediate Next Steps
 
-1. Complete the thread-safe data passing mechanism in reference subscriber (using dsp::RingBuffer)
-2. Implement periodic publishing in the reference provider
-3. Create comprehensive integration tests with more complex data structures
-4. Add detailed comments and documentation in the example code
-5. Update API documentation to reflect the complete workflow
+1. **Complete API Documentation**
+   - Update all public interfaces with detailed comments
+   - Add usage examples for each major function
+   - Clearly document thread-safety requirements
+   - Include best practices based on reference implementation
 
-### Upcoming Milestones
+2. **Create Developer's Guide**
+   - Step-by-step guide to implementing providers
+   - Step-by-step guide to implementing subscribers
+   - Serialization and deserialization guide
+   - Thread-safety considerations and patterns
 
-1. **Complete Sprint 5** (Reference Implementations) - ETA: 1 week
-2. **Begin Sprint 6** (Documentation) - including Developer's Guide and Best Practices
-3. **Prepare for Phase 4** (Integration & Refinement) - VCV Rack integration and optimization
+3. **Integration Guide**
+   - VCV Rack-specific integration guide
+   - Lifecycle management in VCV modules
+   - Audio thread considerations
+   - Performance optimization strategies
+
+## Challenges Being Addressed
+
+1. **Complete Resource Cleanup**
+   - ✅ Fixed issues with bad_weak_ptr exceptions
+   - ✅ Ensured proper broker cleanup
+   - ✅ Verified correct shared_ptr lifetime management
+
+2. **Thread Safety Improvements**
+   - Identified RingBuffer thread safety issue in unit tests
+   - Some items consumed multiple times, others not consumed at all under high concurrency
+   - Reference implementation examples still function correctly
+   - Issue scheduled for resolution in Sprint 7
+
+3. **Documentation Clarity**
+   - Making complex concepts clear and approachable
+   - Balancing comprehensive coverage with readability
+   - Ensuring documentation is useful for both beginners and experts
+
+4. **VCV Rack Integration**
+   - Planning transition from mock framework to real integration
+   - Documenting differences between mock and real environment
+   - Preparing for performance optimization in real-world usage
+
+## Upcoming Milestones
+
+1. Complete API documentation (ETA: 1 week)
+2. Finish developer's guide (ETA: 2 weeks)
+3. Create integration guide (ETA: 3 weeks)
+4. Begin VCV Rack integration (ETA: 4 weeks)
 
 ## Development Priorities
 
-1. Thread safety for audio thread integration
-2. Comprehensive examples for module developers
-3. Performance optimization
-4. Documentation quality
-5. Error handling robustness
-
-## Team Communication
-- Regular updates on reference implementation progress
-- Discussion of best practices based on serialization example learnings
-- Planning documentation structure based on implementation experience 
+1. Documentation completeness and accuracy
+2. Fixing resource cleanup issues
+3. Preparing for VCV Rack integration
+4. Performance optimization 

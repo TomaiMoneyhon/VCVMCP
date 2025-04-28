@@ -1,40 +1,33 @@
-add_executable(broker_tests
+cmake_minimum_required(VERSION 3.15)
+
+# Create a convenience function to reduce repetition and ensure consistent linking
+function(add_mcp_test_executable target_name source_files)
+  add_executable(${target_name} ${source_files})
+  target_link_libraries(${target_name} PRIVATE mcp gtest_main)
+  add_test(NAME ${target_name} COMMAND ${target_name})
+endfunction()
+
+# Main broker tests
+add_mcp_test_executable(broker_tests 
   mcp/BrokerTests.cpp
 )
 
-target_link_libraries(broker_tests
-  PRIVATE
-  mcp
-  gtest
-  gtest_main
-)
-
-add_test(NAME broker_tests COMMAND broker_tests)
-
-# Add serialization tests
-add_executable(serialization_tests
+# Serialization tests
+add_mcp_test_executable(serialization_tests
   mcp/SerializationTests.cpp
 )
 
-target_link_libraries(serialization_tests
-  PRIVATE
-  mcp
-  gtest
-  gtest_main
-)
-
-add_test(NAME serialization_tests COMMAND serialization_tests)
-
-# Add publish/subscribe tests
-add_executable(pubsub_tests
+# Publish/Subscribe tests  
+add_mcp_test_executable(pubsub_tests
   mcp/PublishSubscribeTests.cpp
 )
 
-target_link_libraries(pubsub_tests
-  PRIVATE
-  mcp
-  gtest
-  gtest_main
+# Ring buffer tests
+add_mcp_test_executable(ringbuffer_tests
+  mcp/RingBufferTests.cpp
 )
 
-add_test(NAME pubsub_tests COMMAND pubsub_tests) 
+# Reference implementation tests
+add_mcp_test_executable(reference_tests
+  mcp/ReferenceImplementationTests.cpp
+) 
