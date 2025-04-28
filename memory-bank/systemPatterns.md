@@ -532,6 +532,75 @@ void sendEventBatch() {
 }
 ```
 
+### 3. RingBuffer Usage Pattern
+
+The `RingBuffer` has been optimized for Single-Producer/Single-Consumer (SPSC) scenarios, which matches the most common use case in MCP modules. Following this pattern is critical for thread safety:
+
+```cpp
+// In a typical module class:
+class ExampleModule : public rack::Module, public IMCPSubscriber_V1 {
+private:
+    // Ring buffer for thread-safe communication with audio thread
+    mcp::RingBuffer<float> m_valueBuffer{64}; // Size should be power of 2 for best performance
+    std::atomic<bool> m_hasNewData{false};
+    
+    // Worker thread context (called by MCP broker)
+    void onMCPMessage(const mcp::MCPMessage_V1* message) override {
+        if (!message) return;
+        
+        try {
+            // Extract data from message
+            float value = mcp::serialization::extractMessageData<float>(message);
+            
+            // PRODUCER ROLE: Only the worker thread should push to the buffer
+            if (m_valueBuffer.push(value)) {
+                // Signal to audio thread that new data is available
+                m_hasNewData.store(true, std::memory_order_release);
+            } else {
+                // Buffer full - can log or handle as needed
+                // In practice, this usually means the audio thread isn't 
+                // consuming fast enough or is paused
+            }
+        } catch (const std::exception& e) {
+            // Handle errors
+        }
+    }
+    
+public:
+    // Audio thread context
+    void process(const ProcessArgs& args) override {
+        // CONSUMER ROLE: Only the audio thread should pop from the buffer
+        if (m_hasNewData.load(std::memory_order_acquire)) {
+            float value;
+            while (m_valueBuffer.pop(value)) {
+                // Process the value as needed
+                // ...
+            }
+            
+            // Reset flag after consuming all available data
+            m_hasNewData.store(false, std::memory_order_release);
+        }
+        
+        // Continue with normal audio processing
+        // ...
+    }
+};
+```
+
+Key best practices:
+1. Use a single producer thread (typically the worker thread via `onMCPMessage`)
+2. Use a single consumer thread (typically the audio thread via `process()`)
+3. Use a notification mechanism (like `std::atomic<bool>`) to signal new data
+4. Clear the buffer only when no other threads are accessing it (typically in `onRemove()`)
+5. Size the buffer appropriately for your use case (64-128 elements is typical)
+6. Handle buffer-full conditions gracefully in the producer
+7. Consume all available data in the consumer before resetting the notification flag
+
+For higher performance needs (rare in typical modules), adjust these parameters:
+- Increase buffer size to reduce the chance of buffer-full conditions
+- Consider using exponential backoff when the buffer is full instead of immediately returning
+- In extremely high-throughput scenarios, consider batching multiple values into a single buffer entry
+
 ## Best Practice Patterns
 
 ### 1. Graceful Degradation Pattern

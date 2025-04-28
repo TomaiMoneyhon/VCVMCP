@@ -30,4 +30,14 @@ add_mcp_test_executable(ringbuffer_tests
 # Reference implementation tests
 add_mcp_test_executable(reference_tests
   mcp/ReferenceImplementationTests.cpp
+)
+
+# Performance tests
+add_mcp_test_executable(performance_tests
+  mcp/PerformanceTests.cpp
+)
+
+# RingBuffer stress tests
+add_mcp_test_executable(ringbuffer_stress_tests
+  mcp/RingBufferStressTest.cpp
 ) 

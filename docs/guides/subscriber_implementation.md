@@ -176,12 +176,15 @@ Remember that `onMCPMessage()` is called on a worker thread, not the audio threa
 2. **DO NOT** call VCV UI functions directly from `onMCPMessage()`
 3. **DO** use thread-safe mechanisms (like ring buffers) to pass data to the audio thread
 
-Example of thread-safe member variables:
+### Using RingBuffer Correctly
+
+The `mcp::RingBuffer` is optimized for the Single-Producer/Single-Consumer (SPSC) pattern, which perfectly matches the MCP use case:
 
 ```cpp
+// In module class definition
 private:
-    // For passing values to audio thread
-    rack::dsp::RingBuffer<float, 16> m_valueBuffer;
+    // RingBuffer for thread-safe communication
+    mcp::RingBuffer<float> m_valueBuffer{64};  // Size based on expected message rate
     std::atomic<bool> m_hasNewValue{false};
     
     // For audio thread usage
@@ -190,9 +193,70 @@ private:
     // For UI thread usage (if needed)
     std::string m_textValue;
     std::mutex m_textMutex;  // For protecting access to m_textValue
+
+// In onMCPMessage (worker thread)
+void onMCPMessage(const mcp::MCPMessage_V1* message) override {
+    try {
+        if (message->topic == "other-module/value") {
+            float value = mcp::serialization::extractMessageData<float>(message);
+            
+            // Producer thread pushing to ring buffer
+            if (!m_valueBuffer.push(value)) {
+                // Handle buffer full condition
+                // LOG_WARNING("Buffer full, value dropped");
+            } else {
+                m_hasNewValue.store(true, std::memory_order_release);
+            }
+        }
+    } catch (const mcp::MCPSerializationError& e) {
+        // Handle error
+    }
+}
+
+// In process (audio thread)
+void process(const ProcessArgs& args) override {
+    // Check if we have new data
+    if (m_hasNewValue.load(std::memory_order_acquire)) {
+        float value;
+        
+        // Consumer thread popping from ring buffer
+        while (m_valueBuffer.pop(value)) {
+            // Process the new value
+            m_currentValue = value;
+        }
+        
+        m_hasNewValue.store(false, std::memory_order_release);
+    }
+    
+    // Use m_currentValue in audio processing
+    outputs[OUT_OUTPUT].setVoltage(m_currentValue * 10.f);
+}
 ```
 
-For more detailed information, see the [Thread Safety Guide](thread_safety.md).
+### RingBuffer Best Practices
+
+1. **Follow SPSC Pattern**:
+   - Worker thread (`onMCPMessage`) should be the only producer
+   - Audio thread (`process`) should be the only consumer
+   - Never have multiple threads pushing or multiple threads popping
+
+2. **Size Properly**:
+   - Default of 16 elements is often too small
+   - Recommended size: 64-128 elements for most modules
+   - Too small: Messages may be lost during high message rates
+   - Too large: Unnecessary memory consumption
+
+3. **Handle Full Buffers**:
+   - Always check the return value of `push()`
+   - Implement appropriate fallback behavior (log, discard old values, etc.)
+   - Worker thread should never block if buffer is full
+
+4. **Process Efficiently**:
+   - Audio thread should process all available values
+   - Use `while (buffer.pop(value))` to process everything in the buffer
+   - Reset atomic flag after processing
+
+For more details on thread safety, see the [Thread Safety Guide](thread_safety.md).
 
 ## Discovery and Dynamic Subscription
 
