@@ -3,6 +3,7 @@
 #include <string>
 #include <memory>
 #include <cstddef>
+#include <chrono>
 
 namespace mcp {
 
@@ -24,6 +25,23 @@ namespace DataFormat {
 }
 
 /**
+ * @brief Priority levels for MCP messages.
+ * 
+ * These constants define standard priority levels for message dispatch.
+ * Higher priority messages are processed before lower priority messages.
+ */
+namespace Priority {
+    /** High priority - processed first */
+    const int HIGH = 10;
+    
+    /** Normal priority - default value */
+    const int NORMAL = 5;
+    
+    /** Low priority - processed last */
+    const int LOW = 1;
+}
+
+/**
  * @brief Message structure for the Model Context Protocol.
  * 
  * This structure represents a message passed through the MCP system.
@@ -41,18 +59,25 @@ struct MCPMessage_V1 {
      * @param dataFormat The format of the serialized data (e.g., "application/msgpack").
      * @param data A shared pointer to the serialized data payload.
      * @param dataSize The size of the serialized data in bytes.
+     * @param messageId Optional unique identifier for this message (defaults to 0).
+     * @param priority Priority level for message dispatch (defaults to NORMAL).
      */
     MCPMessage_V1(
         const std::string& topic,
         int senderModuleId,
         const std::string& dataFormat,
         std::shared_ptr<void> data,
-        std::size_t dataSize
+        std::size_t dataSize,
+        uint64_t messageId = 0,
+        int priority = Priority::NORMAL
     ) : topic(topic),
         senderModuleId(senderModuleId),
         dataFormat(dataFormat),
         data(data),
-        dataSize(dataSize) {}
+        dataSize(dataSize),
+        messageId(messageId),
+        priority(priority),
+        timestamp(std::chrono::steady_clock::now()) {}
     
     /** The topic name associated with this message. */
     std::string topic;
@@ -68,6 +93,15 @@ struct MCPMessage_V1 {
     
     /** The size of the serialized data in bytes. */
     std::size_t dataSize;
+    
+    /** Unique identifier for this message (0 if not specified). */
+    uint64_t messageId;
+    
+    /** Priority level for message dispatch (higher = higher priority). */
+    int priority;
+    
+    /** Timestamp when the message was created. */
+    std::chrono::steady_clock::time_point timestamp;
 };
 
 } // namespace mcp 

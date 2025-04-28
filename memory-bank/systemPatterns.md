@@ -234,3 +234,361 @@ The system uses distinct interfaces for different roles:
 - `IMCPProvider_V1` for modules that provide data
 - `IMCPSubscriber_V1` for modules that consume data
 - This allows modules to implement only what they need 
+
+## Core Architectural Patterns
+
+### 1. Hybrid Broker/Interface Model
+
+The MCP system uses a hybrid approach combining:
+
+- **Central Broker** (Singleton): Manages registration, discovery, and message dispatch
+- **Defined Interfaces**: Implemented by modules to participate (IMCPProvider_V1, IMCPSubscriber_V1)
+- **Publish/Subscribe Pattern**: For communication between modules
+
+This hybrid design provides:
+- Central coordination via the broker
+- Decoupling between providers and subscribers
+- Flexibility for modules to act as both providers and subscribers
+
+### 2. Thread-Safe Communication
+
+The MCP system includes several patterns for thread safety:
+
+- **Worker Thread Dispatch**: Message delivery occurs on worker threads, not the audio thread
+- **Lock-Free Ring Buffers**: Used for passing data from worker threads to the audio thread
+- **Mutex Protection**: For broker registry operations
+- **Weak References**: Used for provider/subscriber lifecycle management
+- **Atomic Operations**: For signaling between threads
+
+### 3. Topic-Based Message Routing
+
+Messages are routed using a topic-based system:
+
+- **Topics as Channels**: Each topic represents a distinct channel of communication
+- **Topic Registry**: The broker maintains a mapping of topics to provider modules
+- **Subscription-Based Delivery**: Subscribers only receive messages for topics they subscribe to
+- **Message Filtering**: Subscribers can filter messages based on topic and other criteria
+
+## Topic System Patterns
+
+### 1. URI-Style Topic Naming Convention
+
+Topics follow a standardized URI-style format with two parts:
+
+```
+namespace/resource
+```
+
+Key patterns:
+- **Reverse Domain Notation**: Namespaces use reverse domain notation for uniqueness (e.g., `com.vcvrack.core`)
+- **Lowercase Hyphenated Resources**: Resources use lowercase with hyphens for multi-word names
+- **Version Indicators**: Version numbers in resource names for breaking changes (e.g., `clock-v2`)
+- **Reserved Namespaces**: Specific namespaces reserved for system use (`mcp.system/*`)
+
+### 2. Hierarchical Topic Organization
+
+Topics are organized into a logical hierarchy:
+
+- **System Topics**: Core MCP functionality (`mcp.system/broker-status`)
+- **Core VCV Topics**: Standard VCV Rack features (`com.vcvrack.core/clock`)
+- **Vendor Topics**: Vendor-specific functionality (`com.company.product/feature`)
+- **Module-Specific Topics**: Topics specific to a particular module (`com.company.product/module-feature`)
+- **Functional Categories**: Topics grouped by functionality (clock, MIDI, modulation, etc.)
+
+### 3. Standard Message Structure
+
+Messages follow a consistent structure:
+
+```json
+{
+  "type": "message-type",
+  "version": "1.0",
+  "timestamp": 1625097600000,
+  "source": "com.example.module-name",
+  "data": {
+    // Message-specific payload
+  }
+}
+```
+
+Key components:
+- **Type**: Identifies the message type within the topic context
+- **Version**: Schema version for compatibility
+- **Timestamp**: When the message was created
+- **Source**: Identifier of the sender
+- **Data**: Type-specific payload
+
+### 4. Registration Patterns
+
+Different topic types follow different registration patterns:
+
+- **Standard Topics**: Registered through official documentation process
+- **Vendor-Specific Topics**: Registered by vendors in their namespace
+- **Private Topics**: Used internally without formal registration
+- **Community Topics**: Registered in the community repository
+
+### 5. Message Dispatch Patterns
+
+The system uses several patterns for message delivery:
+
+- **Worker Thread Dispatch**: Messages are delivered on worker threads, not the audio thread
+- **Ring Buffer Communication**: Thread-safe passing of data to the audio thread
+- **Value Filtering**: Only sending messages when values change significantly
+- **Message Throttling**: Limiting message frequency for high-update scenarios
+- **Batching**: Combining multiple related messages into a single update
+
+## Implementation Patterns
+
+### 1. Provider Implementation Pattern
+
+```cpp
+class MyProvider : public rack::Module, public mcp::IMCPProvider_V1,
+                 public std::enable_shared_from_this<MyProvider> {
+public:
+    // IMCPProvider_V1 implementation
+    std::vector<std::string> getProvidedTopics() const override {
+        return {"com.example.my-module/my-topic"};
+    }
+    
+    void onAdd() override {
+        rack::Module::onAdd();
+        auto broker = mcp::getMCPBroker();
+        if (broker) {
+            auto providerPtr = std::dynamic_pointer_cast<mcp::IMCPProvider_V1>(shared_from_this());
+            broker->registerContext("com.example.my-module/my-topic", providerPtr);
+        }
+    }
+    
+    void onRemove() override {
+        auto broker = mcp::getMCPBroker();
+        if (broker) {
+            auto providerPtr = std::dynamic_pointer_cast<mcp::IMCPProvider_V1>(shared_from_this());
+            broker->unregisterContext("com.example.my-module/my-topic", providerPtr);
+        }
+        rack::Module::onRemove();
+    }
+    
+    void publishValue(float value) {
+        auto broker = mcp::getMCPBroker();
+        if (!broker) return;
+        
+        try {
+            auto message = mcp::serialization::createMsgPackMessage(
+                "com.example.my-module/my-topic",
+                this->id,
+                value
+            );
+            broker->publish(message);
+        }
+        catch (const mcp::MCPSerializationError& e) {
+            // Handle error
+        }
+    }
+};
+```
+
+### 2. Subscriber Implementation Pattern
+
+```cpp
+class MySubscriber : public rack::Module, public mcp::IMCPSubscriber_V1,
+                    public std::enable_shared_from_this<MySubscriber> {
+public:
+    // Ring buffer for thread-safe communication
+    rack::dsp::RingBuffer<float, 16> m_valueBuffer;
+    std::atomic<bool> m_hasNewValue{false};
+    
+    // IMCPSubscriber_V1 implementation
+    void onMCPMessage(const mcp::MCPMessage_V1* message) override {
+        if (!message) return;
+        
+        try {
+            if (message->topic == "com.example.other-module/other-topic") {
+                float value = mcp::serialization::extractMessageData<float>(message);
+                
+                // Thread-safe passing to audio thread
+                m_valueBuffer.push(value);
+                m_hasNewValue.store(true, std::memory_order_release);
+            }
+        }
+        catch (const mcp::MCPSerializationError& e) {
+            // Handle error
+        }
+    }
+    
+    void onAdd() override {
+        rack::Module::onAdd();
+        auto broker = mcp::getMCPBroker();
+        if (broker) {
+            auto subscriberPtr = std::dynamic_pointer_cast<mcp::IMCPSubscriber_V1>(shared_from_this());
+            broker->subscribe("com.example.other-module/other-topic", subscriberPtr);
+        }
+    }
+    
+    void onRemove() override {
+        auto broker = mcp::getMCPBroker();
+        if (broker) {
+            auto subscriberPtr = std::dynamic_pointer_cast<mcp::IMCPSubscriber_V1>(shared_from_this());
+            broker->unsubscribeAll(subscriberPtr);
+        }
+        rack::Module::onRemove();
+    }
+    
+    void process(const ProcessArgs& args) override {
+        // Check for new values from the worker thread
+        if (m_hasNewValue.load(std::memory_order_acquire)) {
+            float value;
+            while (m_valueBuffer.pop(value)) {
+                // Process the value
+                // ...
+            }
+            m_hasNewValue.store(false, std::memory_order_release);
+        }
+        
+        // Continue with audio processing
+        // ...
+    }
+};
+```
+
+### 3. Throttling and Filtering Pattern
+
+```cpp
+// Last sent values for filtering
+float m_lastSentValue = 0.f;
+float m_minValueChange = 0.01f;  // Minimum change to trigger an update
+
+// Last send time for throttling
+int64_t m_lastSendTime = 0;
+int64_t m_minSendInterval = 100;  // Minimum ms between updates
+
+void maybePublishValue(float newValue) {
+    // Current time
+    int64_t currentTime = getCurrentTimeMs();
+    
+    // Value filtering - only send if changed significantly
+    if (std::abs(newValue - m_lastSentValue) < m_minValueChange) {
+        return;
+    }
+    
+    // Time throttling - only send if enough time has passed
+    if (currentTime - m_lastSendTime < m_minSendInterval) {
+        return;
+    }
+    
+    // Update tracking variables
+    m_lastSentValue = newValue;
+    m_lastSendTime = currentTime;
+    
+    // Publish the value
+    publishValue(newValue);
+}
+```
+
+### 4. Message Batching Pattern
+
+```cpp
+// Collection of pending events
+std::vector<NoteEvent> m_pendingEvents;
+int64_t m_lastBatchTime = 0;
+int64_t m_batchInterval = 50;  // Max ms between batch sends
+
+void addNoteEvent(const NoteEvent& event) {
+    m_pendingEvents.push_back(event);
+    
+    // Send batch immediately if it's getting large
+    if (m_pendingEvents.size() >= 10) {
+        sendEventBatch();
+        return;
+    }
+    
+    // Send batch if enough time has passed
+    int64_t currentTime = getCurrentTimeMs();
+    if (currentTime - m_lastBatchTime >= m_batchInterval) {
+        sendEventBatch();
+    }
+}
+
+void sendEventBatch() {
+    if (m_pendingEvents.empty()) return;
+    
+    auto broker = mcp::getMCPBroker();
+    if (!broker) return;
+    
+    try {
+        auto message = mcp::serialization::createMsgPackMessage(
+            "com.example.my-module/note-events",
+            this->id,
+            m_pendingEvents
+        );
+        broker->publish(message);
+        
+        // Clear the batch
+        m_pendingEvents.clear();
+        m_lastBatchTime = getCurrentTimeMs();
+    }
+    catch (const mcp::MCPSerializationError& e) {
+        // Handle error
+    }
+}
+```
+
+## Best Practice Patterns
+
+### 1. Graceful Degradation Pattern
+
+```cpp
+void process(const ProcessArgs& args) override {
+    // Try to get value from subscription
+    float value = 0.0f;
+    bool hasValidValue = false;
+    
+    if (m_hasNewValue.load(std::memory_order_acquire)) {
+        while (m_valueBuffer.pop(value)) {
+            hasValidValue = true;
+        }
+        m_hasNewValue.store(false, std::memory_order_release);
+    }
+    
+    // Fallback to manual input if no subscription
+    if (!hasValidValue) {
+        value = params[VALUE_PARAM].getValue();
+    }
+    
+    // Process with the value, regardless of source
+    outputs[VALUE_OUTPUT].setVoltage(value * 10.f);
+}
+```
+
+### 2. Safe Cleanup Pattern
+
+```cpp
+void onRemove() override {
+    // Unregister all topics and unsubscribe from all topics
+    auto broker = mcp::getMCPBroker();
+    if (broker) {
+        // As provider
+        auto providerPtr = std::dynamic_pointer_cast<mcp::IMCPProvider_V1>(shared_from_this());
+        for (const auto& topic : getProvidedTopics()) {
+            broker->unregisterContext(topic, providerPtr);
+        }
+        
+        // As subscriber
+        auto subscriberPtr = std::dynamic_pointer_cast<mcp::IMCPSubscriber_V1>(shared_from_this());
+        broker->unsubscribeAll(subscriberPtr);
+    }
+    
+    // Cancel any pending operations
+    m_workerActive.store(false, std::memory_order_release);
+    if (m_workerThread.joinable()) {
+        m_workerThread.join();
+    }
+    
+    // Clear any buffers
+    float dummy;
+    while (m_valueBuffer.pop(dummy)) {}
+    
+    rack::Module::onRemove();
+}
+```
+
+These patterns form the foundation of the MCP system and provide a consistent approach to implementing providers and subscribers with proper thread safety, lifecycle management, and performance considerations. 

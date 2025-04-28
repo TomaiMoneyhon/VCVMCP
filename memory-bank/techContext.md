@@ -1,343 +1,225 @@
-# VCV Rack MCP - Technology Context
+# VCV Rack MCP - Technical Context
 
 ## Development Environment
 
-- **C++14 Standard**: The MCP is built using C++14 features to ensure compatibility with VCV Rack module development
-- **CMake 3.15+**: Used for build system management
-- **Google Test**: Framework for unit testing
-- **msgpack11**: Lightweight MessagePack library for binary serialization
-
-## Core Technologies
-
-### Language & Libraries
-
-1. **C++14**
-   - Chosen to maintain compatibility with VCV Rack plugins
-   - Using modern C++ features for safety and expressiveness
-   - Leveraging smart pointers for memory management
-   - Exception handling for error conditions
-   - Templates for type-safe generic programming
-
-2. **Standard Library**
-   - `std::mutex` and `std::lock_guard` for thread synchronization
-   - `std::shared_ptr` and `std::weak_ptr` for reference management
-   - `std::vector` and `std::unordered_map` for data structures
-   - `std::thread` and `std::condition_variable` for worker thread management
-   - `std::string` for topic names and string handling
-
-3. **msgpack11**
-   - Lightweight MessagePack implementation for binary serialization
-   - Modeled after json11 with a similar API pattern
-   - Efficient binary format with minimal overhead
-   - Support for serializing various data types (strings, numbers, arrays, maps)
-   - Type-safe C++ API for easy integration
-
-### Key Design Patterns
-
-1. **Singleton Pattern**
-   - Used for the MCPBroker to ensure a single global instance
-   - Thread-safe initialization using double-checked locking
-   - Accessible via getInstance() static method
-
-2. **Publisher/Subscriber Pattern**
-   - Core messaging pattern for the entire MCP system
-   - Topics for message categorization
-   - Multiple providers can publish to the same topic
-   - Multiple subscribers can receive from the same topic
-
-3. **Factory Methods**
-   - Helper functions for creating messages and serializing data
-   - Type-safe interfaces for common operations
-
-4. **RAII (Resource Acquisition Is Initialization)**
-   - Used throughout for managing resources
-   - Lock guards for mutex management
-   - Smart pointers for memory management
-
-5. **Worker Thread Pattern**
-   - Separate thread for message dispatch
-   - Message queue for passing work to the thread
-   - Condition variable for efficient waiting
-
-## Architecture Components
-
-### Core Interfaces
-
-1. **IMCPBroker**
-   - Central interface for the broker functionality
-   - Methods for registration, subscription, and message dispatch
-   - Singleton access point for the entire system
-
-2. **IMCPProvider_V1**
-   - Interface for modules that provide context information
-   - Method to report available topics
-   - Version-specific interface for future compatibility
-
-3. **IMCPSubscriber_V1**
-   - Interface for modules that consume context information
-   - Callback method for receiving messages
-   - Version-specific interface for future compatibility
-
-### Message Structure
-
-**MCPMessage_V1**
-- Contains topic, sender ID, format information and serialized data
-- Designed for efficient message passing
-- Supports multiple serialization formats (currently MessagePack)
-- Thread-safe shared ownership of data
-
-### Serialization
-
-1. **Serialization Helpers**
-   - `createMsgPackMessage`: Creates a message with serialized data using MessagePack
-   - `extractMessageData`: Type-safe deserialization of message data
-   - Error handling for serialization/deserialization failures
-
-2. **Supported Data Types**
-   - Basic types: strings, integers, floats, booleans
-   - Containers: vectors, maps
-   - Custom types (via msgpack11 protocol specialization)
-
-### Thread Management
-
-1. **Broker Thread Safety**
-   - Separate mutexes for different concerns:
-     - Registry mutex for topic/provider management
-     - Subscription mutex for subscriber management
-     - Queue mutex for message queue access
-   - Fine-grained locking to minimize contention
+- **Language:** C++14 (Minimum compatibility for VCV Rack)
+- **Build System:** CMake 3.15+
+- **Dependencies:**
+  - msgpack11 (included as submodule)
+  - Google Test (fetched automatically by CMake)
+- **IDE:** Various (project is IDE-agnostic)
+- **Version Control:** Git
 
-2. **Worker Thread**
-   - Dedicated thread for message dispatch
-   - Non-blocking message queue
-   - Proper shutdown handling
-
-3. **Subscriber Thread Safety**
-   - Messages delivered on worker thread, not audio thread
-   - Subscribers must handle thread-safety when processing messages
-   - Recommended patterns: ring buffers for passing data to audio thread
-
-## Performance Considerations
+## Core Technology Decisions
 
-1. **Memory Management**
-   - Minimal copying of data
-   - Shared pointers for shared ownership
-   - Weak pointers to prevent circular references
-   - Efficient message passing with move semantics
+### 1. Singleton Broker with Interfaces
 
-2. **CPU Overhead**
-   - Lock-free optimizations where possible
-   - Fine-grained locking to minimize contention
-   - Efficient binary serialization with msgpack11
-   - No dynamic allocation in audio thread
+The MCP implementation uses a hybrid broker/interface model:
 
-3. **Scalability**
-   - Efficient lookup in topic registries
-   - O(1) subscriber lookup
-   - Message filtering by topic
-   - Minimal overhead per message
+- **MCPBroker:** Thread-safe singleton for central coordination
+- **IMCPProvider_V1:** Interface for modules providing data
+- **IMCPSubscriber_V1:** Interface for modules consuming data
+- **Public API:** Accessible through the `IMCPBroker` interface
 
-## Testing Approach
+This approach ensures:
+- Separation of concerns (providers/subscribers don't directly interact)
+- Future API evolution via versioned interfaces
+- Flexibility for modules to act as both providers and subscribers
 
-1. **Unit Testing**
-   - Google Test framework
-   - Test fixtures for common setups
-   - Mocks for testing components in isolation
-   - Comprehensive coverage of core functionality
+### 2. Thread Safety Strategy
 
-2. **Thread Safety Testing**
-   - Concurrent access tests
-   - Race condition detection
-   - Stress testing with many threads
+Thread safety is handled through a combination of:
 
-3. **Integration Testing**
-   - End-to-end workflow tests
-   - Example programs demonstrating usage
-   - Real-world use case testing
+- **Mutex-Protected Registry:** Thread-safe registration and subscription
+- **Weak Pointers:** Managing lifecycle of modules safely
+- **Worker Threads:** Message dispatch on non-audio threads
+- **Ring Buffers:** Thread-safe communication with the audio thread
 
-## Current Implementation Status
+Critical considerations:
+- Audio thread must never block
+- No dynamic allocation in real-time paths
+- Thread-safe cleanup of resources
 
-The core broker functionality is fully implemented and tested. Serialization is implemented using msgpack11 for efficient binary serialization. The messaging system is operational with a worker thread dispatching messages to subscribers.
+### 3. Serialization Technology
 
-We have created a complete serialization example demonstrating the full workflow from registration to message publishing and receipt. Thread-safe data passing from worker thread to audio thread is the current focus, which is critical for proper VCV Rack integration.
+For data serialization, MCP uses:
 
-All unit tests are passing, including broker functionality, serialization, and end-to-end message flow tests.
+- **MessagePack:** Primary binary format (compact, efficient)
+  - Implementation: msgpack11 library (C++11 compatible)
+  - Type safety through template specialization
+  - Explicit instantiations for common types
+- **JSON:** Secondary text format (human-readable)
+  - Used primarily for debugging and testing
+  - Easier to inspect than binary MessagePack
 
-## Technologies Used
+### 4. Topic System Implementation
 
-### Development Environment
+The MCP topic system, extensively documented in Sprint 6, is implemented with:
 
-- **C++**: Primary implementation language (C++11/14 for compatibility with VCV Rack)
-- **VCV Rack SDK**: Base framework for integrating with VCV Rack
-- **CMake**: Build system integration
-- **Git**: Version control
-- **GitHub**: Repository hosting and project management
+- **Topic Registry:** Maps topics to provider modules
+  - `std::unordered_map<std::string, std::vector<std::weak_ptr<IMCPProvider_V1>>>`
+  - Thread-safe access through mutexes
+  - Cleanup of expired weak pointers during access
 
-### Core Libraries
+- **Subscription Registry:** Maps subscribers to their topics
+  - `std::unordered_map<IMCPSubscriber_V1*, std::vector<std::string>>`
+  - Thread-safe access through mutexes
+  - Used for efficient unsubscription during cleanup
 
-- **MessagePack**: Primary serialization format for efficient binary data exchange
-  - C++ implementation: `msgpack11` (lightweight implementation)
-  - Provides compact, efficient binary serialization
-  - Faster and smaller than JSON for binary data
-  - Header-only library for easy integration
+- **Topic Hierarchy:** Implemented as simple string paths
+  - No internal tree structure for simplicity
+  - Validation through naming convention enforcement
+  - Querying through string operations
 
-- **JSON**: Secondary serialization option for human-readable debugging
-  - Implementation: `nlohmann/json` (header-only)
-  - Used primarily for development and debugging
-  - Placeholder implementation currently in place for future extension
+- **Standard Topic Catalog:** Documented in `docs/standard_topics.md`
+  - Centralized reference for common topics
+  - No internal enforcement (convention-based)
 
-- **VCV Rack Components**:
-  - `rack::dsp::RingBuffer`: For thread-safe communication between worker and audio threads
-  - VCV Rack Module lifecycle hooks (onAdd, onRemove)
-  - VCV Rack threading model integration
+### 5. Message Dispatch Technology
 
-### Threading Components
+Messages are dispatched using:
 
-- **Worker Thread**: Background thread that processes the message queue
-  - Implemented using std::thread
-  - Synchronization via std::mutex and std::condition_variable
-  - Proper cleanup on destruction
+- **Worker Thread Pool:** Handles message delivery off the audio thread
+- **Message Queue:** Thread-safe queue of messages to be delivered
+- **Notification System:** Wakes worker threads when messages are queued
+- **Direct Delivery:** Worker calls `onMCPMessage` on subscribers
 
-- **Message Queue**: Thread-safe queue for message dispatch
-  - Based on std::queue with mutex protection
-  - Uses condition variable for efficient waiting
-  - Lock-free access pattern for audio thread safety
+## Memory Management
 
-## Development Setup
+### 1. Ownership Model
 
-### Local Development Environment Requirements
+MCP uses a clear ownership model:
 
-1. **VCV Rack SDK**: Latest stable version (to be integrated with)
-2. **C++ Compiler**:
-   - macOS: Clang (via Xcode Command Line Tools)
-   - Windows: MSVC (Visual Studio 2019+)
-   - Linux: GCC 7+ or Clang
+- **Strong Ownership:** Components own their direct children
+- **Weak References:** Used for provider/subscriber tracking
+- **Shared Ownership:** Used for message data via `std::shared_ptr<void>`
+- **std::enable_shared_from_this:** Used for safe self-references
 
-3. **Build Tools**:
-   - CMake 3.15+
-   - Make/Ninja/MSBuild (platform dependent)
+### 2. Resource Cleanup
 
-4. **Dependencies**:
-   - msgpack11 (included in external directory)
-   - nlohmann/json (included in external directory)
-
-### Development Workflow
+Resources are properly managed through:
 
-1. **Setup**: Clone repository and initialize submodules
-2. **Build**: Configure with CMake and build with native tool
-3. **Test**: Run unit tests and integration tests
-4. **Integration**: Test with VCV Rack by building test modules
-
-### Testing Approach
+- **RAII:** Resource Acquisition Is Initialization for all resources
+- **Module Lifecycle:** Registration in `onAdd`, unregistration in `onRemove`
+- **Message Cleanup:** Automatic via `std::shared_ptr` reference counting
+- **Ring Buffer Cleanup:** Explicit clearing during shutdown
 
-- **Unit Testing**: Google Test framework for core functionality
-- **Performance Testing**: Custom benchmarks for critical paths
-- **Thread-safety Testing**: Specialized tests for concurrency
-- **Integration Testing**: Reference modules tested in VCV Rack
-- **Publish/Subscribe Testing**: Specific tests for message dispatch and delivery
-
-## Technical Constraints
+### 3. Memory Safety
 
-### Performance Constraints
-
-- **Real-time Audio Processing**:
-  - Audio thread must not be blocked by MCP operations
-  - Functions called from audio thread must complete with predictable, minimal latency
-  - No memory allocation in audio thread (or use pre-allocated buffers)
-  - No locks contended with audio thread
-
-- **Memory Usage**:
-  - Minimal overhead for small patches
-  - Reasonable scaling for large patches
-  - Efficient message passing without excessive copying
-
-### Threading Constraints
-
-- **VCV Rack Threading Model**:
-  - Primary audio thread runs the audio processing
-  - UI thread for user interface updates
-  - MCP worker thread for message dispatch
-
-- **Thread Safety Requirements**:
-  - Registry operations must be thread-safe
-  - Message queue operations must be thread-safe
-  - Module access to MCP from multiple threads must be handled safely
-  - Subscriber callbacks must handle thread safety
-
-### API Constraints
-
-- **Versioning**:
-  - API must be versioned for future compatibility
-  - Interfaces must be clearly defined and stable once released
-
-- **Ease of Use**:
-  - Clear interfaces for module developers to implement
-  - Minimal code required for basic usage
-  - Comprehensive documentation for all API functions
-
-### Integration Constraints
-
-- **VCV Rack Compatibility**:
-  - Must integrate with VCV Rack module lifecycle
-  - Must follow VCV Rack API conventions and patterns
-  - Must be compatible with VCV Rack SDK build system
-
-## Dependencies
-
-### External Dependencies
-
-| Dependency | Version | Purpose | License |
-|------------|---------|---------|---------|
-| msgpack11 | latest | Efficient binary serialization | MIT |
-| nlohmann/json | 3.10.0+ | JSON parsing/serialization for debugging | MIT |
-| VCV Rack SDK | Latest | Integration with VCV Rack | VCV Rack License |
-| Google Test | 1.10.0+ | Unit testing framework | BSD 3-Clause |
-
-### Internal Dependencies
-
-- **Core MCP Components**:
-  - `IMCPBroker`: Central broker singleton
-  - `IMCPProvider_V1`: Provider interface
-  - `IMCPSubscriber_V1`: Subscriber interface
-  - `MCPMessage_V1`: Message structure
-  - `MCPSerialization`: Helper functions for serialization/deserialization
-
-## Message Exchange Implementation
-
-- **Publish/Subscribe System**:
-  - Providers call `publish()` to send a message
-  - Broker queues the message for processing
-  - Worker thread dispatches messages to subscribers
-  - Subscribers process messages in their `onMCPMessage()` callback
-
-- **Message Structure**:
-  - `MCPMessage_V1` contains topic, sender ID, data format, and binary data
-  - `std::shared_ptr<void>` used for type-agnostic data storage
-  - `DataFormat` enum specifies serialization format (MSGPACK, JSON, BINARY)
-
-- **Serialization Helpers**:
-  - Template functions for various data types
-  - Type-specific conversion functions
-  - Error handling via `MCPSerializationError` class
-  - Message creation helpers that automatically serialize data
-
-- **Worker Thread Operation**:
-  - Thread waits on condition variable when no messages available
-  - Processes messages in FIFO order from the queue
-  - Catches and handles exceptions from subscribers
-  - Cleans up expired weak references during delivery
-
-## Deployment Considerations
-
-- **Integration Path**:
-  - Initially developed as a standalone extension
-  - Eventually integrated into VCV Rack SDK for universal availability
-
-- **Backward Compatibility**:
-  - Should not break existing VCV Rack modules
-  - Should gracefully handle modules without MCP support
-
-- **Documentation**:
-  - API reference documentation
-  - Integration guide for developers
-  - Example implementations 
+Memory safety is ensured through:
+
+- **No Raw Pointers:** Using `std::shared_ptr` and `std::weak_ptr`
+- **No Manual Memory Management:** Avoiding `new`/`delete`
+- **Safe Casting:** Using `std::dynamic_pointer_cast` for interface conversions
+- **Bounds Checking:** Validating all array accesses
+
+## Thread Safety Implementation
+
+### 1. Broker Thread Safety
+
+The broker ensures thread safety through:
+
+- **Registry Mutex:** Protects topic registry and subscription registry
+- **Clean Weak Pointers:** Removes expired weak pointers during retrieval
+- **Worker Thread Isolation:** Message dispatch happens on worker threads
+- **Minimal Locking:** Short critical sections to reduce contention
+
+### 2. Audio Thread Safety
+
+The audio thread is protected through:
+
+- **No Locks:** Audio thread never acquires mutexes
+- **Ring Buffers:** Thread-safe data passing from worker threads
+- **Atomic Flags:** For signaling between threads
+- **Lock-Free Algorithms:** Where possible to avoid contention
+
+### 3. RingBuffer Implementation
+
+The critical `RingBuffer` class:
+
+- Lock-free SPSC (Single Producer, Single Consumer) design
+- Fixed-size circular buffer with atomic read/write indices
+- Support for push/pop operations without blocking
+- Currently has a known thread safety issue (scheduled for Sprint 7 fix)
+
+## Documentation Technology
+
+### 1. API Documentation
+
+API documentation is implemented using:
+
+- **Doxygen-Style Comments:** Detailed function/class documentation
+- **Thread Safety Annotations:** Explicit thread safety notes
+- **Example Usage:** Code samples in documentation
+- **Version Annotations:** Clear marking of API versions
+
+### 2. Topic System Documentation
+
+The topic system documentation completed in Sprint 6 includes:
+
+- **Markdown Format:** All documentation in GitHub-flavored Markdown
+- **Topic Naming Conventions:** Defined in `docs/topic_naming_conventions.md`
+- **Standard Topics Catalog:** Table-based format in `docs/standard_topics.md`
+- **Message Format Specifications:** JSON schema examples in `docs/message_formats.md`
+- **Implementation Patterns:** Code examples in `docs/topic_best_practices.md`
+- **Registration Process:** Process documentation in `docs/topic_registration.md`
+- **Documentation Index:** Central reference in `docs/topics_documentation.md`
+
+### 3. Code Examples
+
+Example implementations demonstrate:
+
+- **Provider Implementation:** Complete example provider module
+- **Subscriber Implementation:** Complete example subscriber module
+- **Thread-Safe Communication:** Ring buffer usage with worker threads
+- **Message Format:** Serialization/deserialization examples
+- **Error Handling:** Proper exception handling
+
+## Testing Technology
+
+### 1. Unit Testing
+
+Unit tests are implemented using:
+
+- **Google Test Framework:** Via CMake FetchContent
+- **Mock Objects:** For testing isolated components
+- **Thread Safety Tests:** Concurrency stress tests
+- **Serialization Tests:** Ensuring data integrity
+
+### 2. Integration Testing
+
+Integration tests verify end-to-end functionality:
+
+- **Reference Implementation:** Showing complete workflow
+- **Mock VCV Rack Framework:** For testing without the actual environment
+- **Thread Stress Tests:** Heavy concurrency scenarios
+- **Multiple Provider/Subscriber Tests:** Complex interaction scenarios
+
+## Future Technical Considerations
+
+### 1. Performance Optimization
+
+Planned for Sprint 7:
+
+- **Message Pooling:** Reducing allocation overhead
+- **Dispatch Optimization:** More efficient message delivery
+- **Lock Contention Analysis:** Identifying bottlenecks
+- **Profiling Core Operations:** Measuring and optimizing critical paths
+
+### 2. Thread Safety Improvements
+
+Planned for Sprint 7-8:
+
+- **RingBuffer Fix:** Addressing the identified thread safety issue
+- **More Efficient Synchronization:** Reducing contention
+- **Deadlock Prevention:** Ensuring proper lock ordering
+- **Enhanced Error Recovery:** Handling thread failure scenarios
+
+### 3. VCV Rack Integration
+
+Planned for Sprint 9:
+
+- **SDK Integration:** Properly integrating with VCV Rack SDK
+- **Plugin API Compatibility:** Ensuring proper VCV Rack interface usage
+- **Resource Efficiency:** Minimizing impact on VCV Rack performance
+- **Documentation Integration:** Incorporating into VCV documentation 

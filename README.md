@@ -24,6 +24,13 @@ This repository contains the implementation of Phase 1 of the MCP development pl
 - Extended unit tests for subscription functionality
 - Initial API documentation
 
+### Documentation Additions
+- Comprehensive topic system documentation
+- Standardized topic naming conventions
+- Catalog of standard topics with message formats
+- Topic registration process
+- Best practices for implementing topics
+
 ## Building the Project
 
 ### Requirements
@@ -74,6 +81,13 @@ ctest
 
 - `docs/`: Documentation
   - `api_documentation.md`: API documentation
+  - `topics_documentation.md`: Index for topic system documentation
+  - `topic_naming_conventions.md`: Guidelines for topic naming
+  - `standard_topics.md`: Catalog of standard topics
+  - `message_formats.md`: Message format specifications
+  - `topic_registration.md`: Process for registering topics
+  - `topic_best_practices.md`: Best practices for using topics
+  - Additional core documentation files
 
 ## Next Steps
 
